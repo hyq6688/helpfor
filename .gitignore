@@ -1,0 +1,10 @@
+node_modules
+dist
+# 由 npm run assets 生成，源文件在 tools/models 与 node_modules/@mediapipe/tasks-vision/wasm
+public/models
+public/wasm
+# 本地杂项，不进仓库
+.screenshots
+.trae-html-share-packages
+helpphoto
+tools.zip

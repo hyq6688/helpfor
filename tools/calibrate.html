@@ -1,0 +1,572 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>校准工具 · shot-guide</title>
+<style>
+  :root {
+    --bg: #0b0b0c; --panel: #17171a; --line: #2a2a30; --text: #e9e9ec; --muted: #8b8b94;
+    --red: #ff3b30; --yellow: #ffcc00; --green: #34c759; --blue: #4a90e2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  header { padding: 14px 20px; border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 12px; }
+  header h1 { font-size: 18px; margin: 0; }
+  header span { font-size: 12px; color: var(--muted); }
+  #env { margin-left: auto; font-size: 12px; color: var(--muted); }
+  main { display: flex; gap: 18px; padding: 18px 20px; align-items: flex-start; }
+
+  .cam { flex: 0 0 auto; }
+  .frame {
+    position: relative; width: 375px; height: 812px; background: #000;
+    border-radius: 18px; overflow: hidden; border: 1px solid var(--line);
+  }
+  video, canvas#overlay {
+    position: absolute; inset: 0; width: 375px; height: 812px;
+    object-fit: cover;
+  }
+  canvas#overlay { pointer-events: none; }
+  .empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    text-align: center; color: var(--muted); font-size: 14px; line-height: 1.8; padding: 24px;
+  }
+  .cam-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+  .panel { flex: 1 1 auto; min-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); font-weight: 600; letter-spacing: .04em; }
+
+  .model-row { display: grid; grid-template-columns: 78px 1fr auto; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .model-row:last-child { margin-bottom: 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 8px; background: #555; }
+  .dot.ok { background: var(--green); }
+  .dot.bad { background: var(--red); }
+  .dot.loading { background: var(--yellow); }
+
+  input[type=text], select, button {
+    font: inherit; font-size: 13px; color: var(--text);
+    background: #101014; border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px;
+  }
+  button { cursor: pointer; background: #232329; }
+  button:hover { background: #2c2c34; }
+  button.primary { background: var(--blue); border-color: var(--blue); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  input[type=file] { font-size: 12px; color: var(--muted); }
+
+  .live { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .metric { background: #101014; border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; }
+  .metric .k { font-size: 11px; color: var(--muted); }
+  .metric .v { font-size: 19px; font-variant-numeric: tabular-nums; margin-top: 3px; }
+  .metric .v.null { color: #555; }
+
+  .form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .form label { font-size: 12px; color: var(--muted); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { border-bottom: 1px solid var(--line); padding: 6px 8px; text-align: right; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+  th { color: var(--muted); font-weight: 500; }
+  tbody tr:hover { background: #1d1d23; }
+
+  pre#thresholds {
+    margin: 0; font-size: 12px; line-height: 1.7; color: #cfd3ff;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  .hint { font-size: 12px; color: var(--muted); line-height: 1.7; }
+  .warn { color: var(--yellow); }
+  .err { color: var(--red); }
+  .actions { display: flex; gap: 8px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>校准工具</h1>
+  <span>临时工具 · 不进入产品 · 数值用于回填 SPEC §8.3</span>
+  <div id="env"></div>
+</header>
+
+<main>
+  <section class="cam">
+    <div class="frame">
+      <video id="video" playsinline muted autoplay></video>
+      <canvas id="overlay"></canvas>
+      <div id="empty" class="empty">点击「开启相机」<br />需要 HTTPS 或 localhost</div>
+    </div>
+    <div class="cam-actions">
+      <button id="btnCam" class="primary">开启相机</button>
+      <select id="profile">
+        <option value="half">半身</option>
+        <option value="full_ground">全身 · 拍脚</option>
+        <option value="full_noground">全身 · 不拍脚</option>
+      </select>
+      <button id="btnReset">重置平滑</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="card">
+      <h2>模型</h2>
+      <div class="model-row">
+        <div><span id="detDot" class="dot"></span>检测框</div>
+        <div>
+          <input type="text" id="detPath" value="./models/efficientdet_lite0.tflite" />
+          <input type="file" id="detFile" accept=".tflite,.task" />
+        </div>
+        <button id="detLoad">加载</button>
+      </div>
+      <div class="model-row">
+        <div><span id="poseDot" class="dot"></span>姿态</div>
+        <div>
+          <input type="text" id="posePath" value="./models/pose_landmarker_lite.task" />
+          <input type="file" id="poseFile" accept=".task,.tflite" />
+        </div>
+        <button id="poseLoad">加载</button>
+      </div>
+      <div class="hint" id="modelHint">姿态模型缺失时可点「选择文件」手动载入；不载入姿态模型则只能测框高类指标。</div>
+    </div>
+
+    <div class="card">
+      <h2>实时指标（容器归一化，375×812）</h2>
+      <div class="live">
+        <div class="metric"><div class="k">肩宽 shoulderWidth</div><div class="v null" id="mSw">—</div></div>
+        <div class="metric"><div class="k">正对度 faceOffset</div><div class="v null" id="mFo">—</div></div>
+        <div class="metric"><div class="k">有效尺度 scale</div><div class="v null" id="mScale">—</div></div>
+        <div class="metric"><div class="k">框高 hRatio</div><div class="v null" id="mHr">—</div></div>
+        <div class="metric"><div class="k">头顶留白 headTop</div><div class="v null" id="mHt">—</div></div>
+        <div class="metric"><div class="k">脚下余量 gapBottom</div><div class="v null" id="mGb">—</div></div>
+      </div>
+      <div class="hint" id="videoInfo">视频：—</div>
+    </div>
+
+    <div class="card">
+      <h2>记录样本</h2>
+      <form class="form" id="sampleForm">
+        <label>体型
+          <select id="body"><option>成人</option><option>较矮</option><option>儿童</option></select>
+        </label>
+        <label>距离
+          <select id="dist"><option>1.5m</option><option>2.5m</option><option>4.0m</option></select>
+        </label>
+        <label>姿态
+          <select id="poseKind"><option>正对</option><option>侧身45</option></select>
+        </label>
+        <button type="submit" class="primary" id="btnRecord" disabled>记录</button>
+      </form>
+      <div class="hint">每个组合站定 3 秒后点一次「记录」；半身 / 膝上至少各 3 个体型 × 3 个距离，另加「侧身45」样本。</div>
+    </div>
+
+    <div class="card">
+      <h2>样本（<span id="count">0</span>）</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>档案</th><th>体型</th><th>距离</th><th>姿态</th>
+            <th>肩宽</th><th>正对度</th><th>框高</th><th>头顶</th><th>脚下</th>
+          </tr>
+        </thead>
+        <tbody id="rows"><tr><td colspan="9" style="text-align:center;color:#555">暂无样本</td></tr></tbody>
+      </table>
+      <div class="actions" style="margin-top:10px">
+        <button id="btnCsv">下载 CSV</button>
+        <button id="btnCopy">复制</button>
+        <button id="btnClear">清空</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>建议阈值（按 SPEC §14 公式，保留两位小数）</h2>
+      <pre id="thresholds">样本不足，至少需要同一档案 3 条以上。</pre>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { FilesetResolver, ObjectDetector, PoseLandmarker } from './vendor/vision_bundle.mjs';
+
+const CW = 375, CH = 812;
+const EMA_ALPHA = 0.3;
+const DETECT_INTERVAL = 100;
+const POSE_INTERVAL = 200;
+const PRESENCE_MIN = 0.5;
+
+const PROFILES = {
+  half:         { label: '半身',        targetBox: { x: 0.20, y: 0.15, w: 0.60, h: 0.70 }, scaleSource: 'shoulder' },
+  full_ground:  { label: '全身·拍脚',   targetBox: { x: 0.22, y: 0.08, w: 0.56, h: 0.84 }, scaleSource: 'bboxHeight' },
+  full_noground:{ label: '全身·不拍脚', targetBox: { x: 0.20, y: 0.05, w: 0.60, h: 0.95 }, scaleSource: 'shoulder' },
+};
+
+const $ = (id) => document.getElementById(id);
+const video = $('video');
+const overlay = $('overlay');
+const ctx = overlay.getContext('2d');
+overlay.width = CW;
+overlay.height = CH;
+$('env').textContent = window.isSecureContext ? 'secure context' : '⚠ 非安全上下文，相机不可用';
+
+let visionPromise = null;
+let detector = null;
+let poseLandmarker = null;
+
+let detBox = null;       // 容器归一化
+let lms = null;          // 33 个容器归一化点 {x,y,v}
+let smooth = {};         // 标量 EMA
+let videoW = 0, videoH = 0, ts = 0;
+let lastDetAt = 0, lastPoseAt = 0;
+const samples = [];
+
+function setDot(el, s) { el.className = 'dot ' + (s || ''); }
+
+function getVision() {
+  if (!visionPromise) visionPromise = FilesetResolver.forVisionTasks('./vendor/wasm');
+  return visionPromise;
+}
+
+async function createDetector(path) {
+  const vision = await getVision();
+  let lastErr;
+  for (const delegate of ['GPU', 'CPU']) {
+    try {
+      return await ObjectDetector.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: path, delegate },
+        scoreThreshold: 0.4,
+        runningMode: 'VIDEO',
+        maxResults: 5,
+      });
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
+async function createPose(path) {
+  const vision = await getVision();
+  let lastErr;
+  for (const delegate of ['GPU', 'CPU']) {
+    try {
+      return await PoseLandmarker.createFromOptions(vision, {
+        baseOptions: { modelAssetPath: path, delegate },
+        runningMode: 'VIDEO',
+        numPoses: 2,
+        minPoseDetectionConfidence: 0.5,
+        minPosePresenceConfidence: 0.5,
+        minTrackingConfidence: 0.5,
+      });
+    } catch (e) { lastErr = e; }
+  }
+  throw lastErr;
+}
+
+// SPEC §6：视频归一化 → 容器归一化（cover）
+function vScale() { return Math.max(CW / videoW, CH / videoH); }
+function boxToC(b) {
+  const s = vScale(), dw = videoW * s, dh = videoH * s;
+  const ox = (CW - dw) / 2, oy = (CH - dh) / 2;
+  return {
+    x: (b.x * videoW * s + ox) / CW,
+    y: (b.y * videoH * s + oy) / CH,
+    w: (b.w * videoW * s) / CW,
+    h: (b.h * videoH * s) / CH,
+  };
+}
+function pointToC(p) {
+  const s = vScale(), dw = videoW * s, dh = videoH * s;
+  const ox = (CW - dw) / 2, oy = (CH - dh) / 2;
+  return {
+    x: (p.x * videoW * s + ox) / CW,
+    y: (p.y * videoH * s + oy) / CH,
+    v: p.visibility ?? p.presence ?? 1,
+  };
+}
+
+function nextTs() { ts = Math.max(ts + 1, Math.floor(performance.now())); return ts; }
+
+function area(d) { const b = d.boundingBox; return b.width * b.height; }
+
+function runDetect() {
+  let res;
+  try { res = detector.detectForVideo(video, nextTs()); } catch { return; }
+  const persons = (res.detections || []).filter(
+    (d) => d.categories && d.categories[0] && d.categories[0].categoryName === 'person'
+  ).sort((a, b) => area(b) - area(a));
+  const d = persons[0];
+  if (!d) { detBox = null; return; }
+  const b = d.boundingBox;
+  detBox = boxToC({
+    x: b.originX / videoW, y: b.originY / videoH,
+    w: b.width / videoW, h: b.height / videoH,
+  });
+}
+
+function runPose() {
+  let res;
+  try { res = poseLandmarker.detectForVideo(video, nextTs()); } catch { return; }
+  const first = (res.landmarks || [])[0];
+  lms = first ? first.map(pointToC) : null;
+}
+
+function ema(key, val) {
+  if (val == null) return null;
+  smooth[key] = smooth[key] == null ? val : smooth[key] + (val - smooth[key]) * EMA_ALPHA;
+  return smooth[key];
+}
+
+function currentMetrics() {
+  const box = detBox;
+  const hasEdges = !!box;
+  const ls = lms && lms[11], rs = lms && lms[12], nose = lms && lms[0];
+  const hasSh = !!(ls && rs && ls.v >= PRESENCE_MIN && rs.v >= PRESENCE_MIN);
+  const swRaw = hasSh ? Math.abs(ls.x - rs.x) : null;
+  const midX = hasSh ? (ls.x + rs.x) / 2 : box ? box.x + box.w / 2 : null;
+  const foRaw = hasSh && nose && swRaw > 1e-6 ? Math.abs(nose.x - midX) / swRaw : null;
+  const raw = {
+    sw: swRaw,
+    fo: foRaw,
+    hr: box ? box.h : null,
+    ht: box ? box.y : null,
+    gb: box ? 1 - (box.y + box.h) : null,
+    bw: box ? box.w : null,
+  };
+  const sw = ema('sw', raw.sw);
+  const fo = ema('fo', raw.fo);
+  const hr = ema('hr', raw.hr);
+  const ht = ema('ht', raw.ht);
+  const gb = ema('gb', raw.gb);
+  const profile = $('profile').value;
+  const scale = PROFILES[profile].scaleSource === 'shoulder' ? sw : hr;
+  return { hasEdges, hasSh, sw, fo, hr, ht, gb, bw: raw.bw, scale };
+}
+
+function fmt(v) { return v == null ? null : v.toFixed(3); }
+function put(id, v) {
+  const el = $(id);
+  const s = fmt(v);
+  el.textContent = s ?? '—';
+  el.classList.toggle('null', s == null);
+}
+
+function draw(m) {
+  ctx.clearRect(0, 0, CW, CH);
+  const tb = PROFILES[$('profile').value].targetBox;
+  ctx.setLineDash([8, 6]);
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = 'rgba(255,255,255,.35)';
+  ctx.strokeRect(tb.x * CW, tb.y * CH, tb.w * CW, tb.h * CH);
+  ctx.setLineDash([]);
+
+  if (detBox) {
+    ctx.strokeStyle = '#34c759';
+    ctx.strokeRect(detBox.x * CW, detBox.y * CH, detBox.w * CW, detBox.h * CH);
+  }
+  const ls = lms && lms[11], rs = lms && lms[12], nose = lms && lms[0];
+  if (ls && rs) {
+    ctx.strokeStyle = '#4a90e2';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(ls.x * CW, ls.y * CH);
+    ctx.lineTo(rs.x * CW, rs.y * CH);
+    ctx.stroke();
+  }
+  if (nose) {
+    ctx.fillStyle = '#ffcc00';
+    ctx.beginPath();
+    ctx.arc(nose.x * CW, nose.y * CH, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function tick(now) {
+  if (video.readyState >= 2 && videoW) {
+    if (detector && now - lastDetAt >= DETECT_INTERVAL) { lastDetAt = now; runDetect(); }
+    if (poseLandmarker && now - lastPoseAt >= POSE_INTERVAL) { lastPoseAt = now; runPose(); }
+    const m = currentMetrics();
+    draw(m);
+    put('mSw', m.sw); put('mFo', m.fo); put('mScale', m.scale);
+    put('mHr', m.hr); put('mHt', m.ht); put('mGb', m.gb);
+    $('btnRecord').disabled = !(m.sw != null || m.hr != null);
+    window.__metrics = m;
+  }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+
+// ---------- 模型加载 ----------
+function bindModel(kind) {
+  const pathInput = $(kind + 'Path');
+  const fileInput = $(kind + 'File');
+  const dot = $(kind + 'Dot');
+  const btn = $(kind + 'Load');
+
+  fileInput.addEventListener('change', () => {
+    const f = fileInput.files && fileInput.files[0];
+    if (f) pathInput.value = URL.createObjectURL(f);
+  });
+
+  btn.addEventListener('click', async () => {
+    const path = pathInput.value.trim();
+    if (!path) return;
+    setDot(dot, 'loading');
+    btn.disabled = true;
+    $('modelHint').className = 'hint';
+    $('modelHint').textContent = '正在加载 ' + kind + ' 模型…';
+    try {
+      if (kind === 'det') detector = await createDetector(path);
+      else poseLandmarker = await createPose(path);
+      setDot(dot, 'ok');
+      $('modelHint').textContent = (kind === 'det' ? '检测框模型' : '姿态模型') + '已就绪';
+    } catch (e) {
+      setDot(dot, 'bad');
+      $('modelHint').className = 'hint err';
+      $('modelHint').textContent = '加载失败：' + (e && e.message ? e.message : e);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+}
+bindModel('det');
+bindModel('pose');
+
+// ---------- 相机 ----------
+$('btnCam').addEventListener('click', async () => {
+  if (!window.isSecureContext) { $('empty').textContent = '非 HTTPS：浏览器禁止使用相机'; return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+      },
+      audio: false,
+    });
+    video.srcObject = stream;
+    await video.play();
+    videoW = video.videoWidth;
+    videoH = video.videoHeight;
+    $('empty').style.display = 'none';
+    $('videoInfo').textContent = `视频：${videoW}×${videoH} · cover scale=${vScale().toFixed(4)}`;
+  } catch (e) {
+    const msg = e && e.name === 'NotAllowedError' ? '摄像头权限被拒绝'
+      : e && e.name === 'NotFoundError' ? '未找到可用摄像头'
+      : '相机启动失败：' + (e && e.message ? e.message : e);
+    $('empty').textContent = msg;
+  }
+});
+
+// ---------- 记录 ----------
+$('btnReset').addEventListener('click', () => { smooth = {}; });
+
+$('sampleForm').addEventListener('submit', (ev) => {
+  ev.preventDefault();
+  const m = window.__metrics;
+  if (!m) return;
+  samples.push({
+    profile: $('profile').value,
+    body: $('body').value,
+    dist: $('dist').value,
+    poseKind: $('poseKind').value,
+    sw: m.sw, fo: m.fo, hr: m.hr, ht: m.ht, gb: m.gb,
+  });
+  renderSamples();
+  renderThresholds();
+});
+
+function renderSamples() {
+  const rows = $('rows');
+  $('count').textContent = String(samples.length);
+  if (!samples.length) {
+    rows.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#555">暂无样本</td></tr>';
+    return;
+  }
+  rows.innerHTML = samples.map((s) => `<tr>
+    <td>${PROFILES[s.profile].label}</td><td>${s.body}</td><td>${s.dist}</td><td>${s.poseKind}</td>
+    <td>${fmt(s.sw) ?? '—'}</td><td>${fmt(s.fo) ?? '—'}</td><td>${fmt(s.hr) ?? '—'}</td>
+    <td>${fmt(s.ht) ?? '—'}</td><td>${fmt(s.gb) ?? '—'}</td></tr>`).join('');
+}
+
+function median(arr) {
+  if (!arr.length) return null;
+  const s = [...arr].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+const round2 = (v) => Math.round(v * 100) / 100;
+
+function renderThresholds() {
+  const out = [];
+  for (const [id, cfg] of Object.entries(PROFILES)) {
+    const group = samples.filter((s) => s.profile === id && s.poseKind === '正对');
+    const values = group.map((s) => (cfg.scaleSource === 'shoulder' ? s.sw : s.hr)).filter((v) => v != null);
+    if (values.length < 3) {
+      out.push(`${cfg.label}：样本不足（${values.length}/3）`);
+      continue;
+    }
+    const target = median(values);
+    const tooFarEnter = round2(target * 0.80);
+    const tooFarExit = round2(target * 0.88);
+    const tooCloseEnter = round2(target * 1.25);
+    const tooCloseExit = round2(target * 1.15);
+    out.push(
+      `${cfg.label}  (scaleSource=${cfg.scaleSource}, n=${values.length})`,
+      `  target        = ${round2(target)}`,
+      `  tooFar  enter < ${tooFarEnter}   exit >= ${tooFarExit}`,
+      `  tooClose enter > ${tooCloseEnter}   exit <= ${tooCloseExit}`
+    );
+
+    if (cfg.scaleSource === 'shoulder') {
+      const front = samples.filter((s) => s.profile === id && s.poseKind === '正对' && s.fo != null).map((s) => s.fo);
+      const side = samples.filter((s) => s.profile === id && s.poseKind === '侧身45' && s.fo != null).map((s) => s.fo);
+      if (front.length && side.length) {
+        const f = round2(median(front));
+        const sd = round2(median(side));
+        out.push(
+          `  faceOffset 正对=${f}  侧身45=${sd}`,
+          `  turnToCamera enter > ${round2(sd * 0.70)}   exit <= ${round2(sd * 0.56)}`
+        );
+      } else {
+        out.push('  faceOffset：还需「正对」与「侧身45」各至少 1 条样本');
+      }
+    }
+    out.push('');
+  }
+  $('thresholds').textContent = out.join('\n').trim() || '样本不足。';
+}
+
+// ---------- 导出 ----------
+function toCsv() {
+  const head = ['profile', 'body', 'distance', 'pose', 'shoulderWidth', 'faceOffset', 'hRatio', 'headTop', 'gapBottom'];
+  const lines = samples.map((s) =>
+    [s.profile, s.body, s.dist, s.poseKind, s.sw, s.fo, s.hr, s.ht, s.gb]
+      .map((v) => (typeof v === 'number' ? v.toFixed(4) : v ?? ''))
+      .join(',')
+  );
+  return [head.join(','), ...lines].join('\n');
+}
+
+$('btnCsv').addEventListener('click', () => {
+  const blob = new Blob([toCsv()], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `calibration-${Date.now()}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+$('btnCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('thresholds').textContent); $('btnCopy').textContent = '已复制'; }
+  catch { $('btnCopy').textContent = '复制失败'; }
+  setTimeout(() => { $('btnCopy').textContent = '复制'; }, 1500);
+});
+
+$('btnClear').addEventListener('click', () => {
+  samples.length = 0;
+  renderSamples();
+  $('thresholds').textContent = '样本不足，至少需要同一档案 3 条以上。';
+});
+
+$('profile').addEventListener('change', () => { smooth = {}; renderThresholds(); });
+</script>
+</body>
+</html>
