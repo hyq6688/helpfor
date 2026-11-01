@@ -1,5 +1,9 @@
 node_modules
 dist
+# 本地环境变量（含 Supabase anon key，不进仓库）
+.env
+.env.local
+.env.*.local
 # 由 npm run assets 生成，源文件在 tools/models 与 node_modules/@mediapipe/tasks-vision/wasm
 public/models
 public/wasm

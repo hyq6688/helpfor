@@ -87,13 +87,18 @@ src/
   types.ts
   constants.ts                // 阈值、间隔、时长
   copy.ts                     // 文案表，逐字来自 PRD §5.6
-  profiles.ts                 // 3 个构图档案：目标框、轮廓、规则集
+  profiles.ts                 // 3 个构图档案 + DEFAULT_TEMPLATES + buildProfileFromStored
+  lib/
+    supabase.ts               // Supabase 浏览器单例（仅 anon key）
+  context/
+    AuthContext.tsx           // AuthProvider / useAuth / isAdmin
   hooks/
     useCamera.ts
     useDetectors.ts           // 两个模型初始化 + 逐帧推理（含采样时钟）
     useOrientation.ts         // roll（含 iOS 授权）
     useSpeech.ts              // 解锁、节流、倒计时通道
     useCapture.ts             // 倒计时 + 连拍（S4 与 SManual 共用）
+    useTemplates.ts           // 模板拉取（Supabase + 3s 超时 + 降级）
     useWakeLock.ts
   core/
     coordinate.ts             // 视频 → 容器
@@ -104,13 +109,15 @@ src/
     capture.ts                // grabFrame + coverSourceRect（所见即所得抓帧）
     save.ts                   // share / download
   screens/
-    S1SceneSelect.tsx
-    S2IncludeGround.tsx       // 仅全身
+    S1TemplateList.tsx        // 模板列表（原 S1SceneSelect，已改模板网格）
+    S2IncludeGround.tsx       // 仅全身（保留但不再路由，模板已决定档案）
     S3Handoff.tsx
     S4Guide.tsx
     S5Select.tsx
     SFallback.tsx
     SManual.tsx
+    LoginModal.tsx            // 邮箱+密码 / 邮箱验证码 双模式登录
+    AdminTemplates.tsx        // 模板管理页（仅 admin）
   components/
     Silhouette.tsx
     GuideBar.tsx
@@ -118,7 +125,7 @@ src/
     LevelIndicator.tsx
     OnboardingOverlay.tsx
     LoadingOverlay.tsx
-  styles/global.css
+  styles/global.css           // Apple Style Design Token + 组件样式
 ```
 
 ---
@@ -128,14 +135,15 @@ src/
 ```ts
 export type SceneId = 'half' | 'full';
 export type ProfileId = 'half' | 'full_ground' | 'full_noground';
-export type ScreenId = 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'SFallback' | 'SManual';
+export type ScreenId = 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'SFallback' | 'SManual' | 'Admin';
 export type RuleColor = 'red' | 'yellow' | 'green';
 
 export interface AppState {
   screen: ScreenId;
   sceneId: SceneId | null;
   includeGround: boolean;      // 仅 full 有意义，默认 true
-  profile: ProfileId | null;
+  profile: ProfileId | null;   // 默认档案 key；自定义模板时为骨架 id
+  templateProfile: ProfileConfig | null;  // 来自模板的完整 ProfileConfig
   photos: Blob[];
   selectedIndex: number;       // 默认 0
   saveState: 'idle' | 'handedToSystem' | 'downloaded' | 'cancelled' | 'failed';
@@ -203,6 +211,30 @@ export interface ProfileConfig {
   silhouettePath: 'half' | 'full' | 'full_crop';
   rules: RuleConfig[];
   briefing: string[];          // 手动模式/SFallback 的三句静态指引
+}
+
+// 模板（v1.1）
+export interface Template {
+  id: string;
+  name: string;
+  description: string;
+  coverUrl: string;
+  profile: ProfileConfig;
+  sort: number;
+  active: boolean;
+}
+
+// Supabase 存储的 profile_config（仅阈值，不含函数闭包）
+export interface StoredTemplateConfig {
+  base: ProfileId;
+  label: string;
+  targetBox: Box;
+  tooFarEnter: number; tooFarExit: number;
+  tooCloseEnter: number; tooCloseExit: number;
+  faceOffsetEnter: number; faceOffsetExit: number;
+  headCropEnter: number; headCropExit: number;
+  headGapEnter: number; headGapExit: number;
+  briefing: string[];
 }
 ```
 
@@ -291,6 +323,10 @@ full_noground: { x: 0.20, y: 0.05, w: 0.60, h: 0.95 }   // [待校准]
 const profile: ProfileId = sceneId === 'half' ? 'half'
   : includeGround ? 'full_ground' : 'full_noground';
 ```
+
+**模板化（v1.1）**：三个档案被包装为 `DEFAULT_TEMPLATES`（`profiles.ts`），作为 S1 模板列表的兜底。
+Supabase `templates` 表存 `profile_config`（JSONB，仅阈值数字，不含函数闭包），由 `buildProfileFromStored(cfg)` 重建 `ProfileConfig`。
+选模板后 `AppState.templateProfile` 直接持有完整 `ProfileConfig`，`S4`/`SManual` 复用现有渲染。
 
 ---
 
@@ -824,6 +860,7 @@ faceOffset.exit  = 0.56 × S      // 回正后才解除（= enter × 0.8）
 | 9 | S5 选片 + 保存三态 + 空态 | 保存路径可验证 |
 | 10 | SFallback + SManual + Wake Lock | 三条降级路径可走 |
 | 11 | §14 校准 + §13 验收逐条过 | 全部打勾 |
+| 12 | 登录（Supabase Auth 邮箱+密码/验证码）+ 模板库（S1 模板列表 + useTemplates 降级）+ 管理页（AdminTemplates）+ Apple Style UI Token | 登录/模板/管理可用，暗色模式正常，`npm run build` 全绿 |
 
 ---
 

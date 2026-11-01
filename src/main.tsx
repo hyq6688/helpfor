@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { AuthProvider } from './context/AuthContext';
 import './styles/global.css';
 
 // @mediapipe/tasks-vision 内置 usage log（每 60s 向 odml.pa.googleapis.com 上报）。
@@ -17,6 +18,8 @@ window.fetch = (input: RequestInfo | URL, init?: RequestInit) => {
 
 createRoot(document.getElementById('app')!).render(
   <StrictMode>
-    <App />
+    <AuthProvider>
+      <App />
+    </AuthProvider>
   </StrictMode>,
 );

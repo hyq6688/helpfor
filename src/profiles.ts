@@ -8,7 +8,16 @@ import {
   ROLL_EXIT_DEG,
 } from './constants';
 import { dxOf, gapBottomOf } from './core/metrics';
-import type { ProfileConfig, ProfileId, RuleConfig, SceneId, SubjectMetrics } from './types';
+import type {
+  Box,
+  ProfileConfig,
+  ProfileId,
+  RuleConfig,
+  SceneId,
+  StoredTemplateConfig,
+  SubjectMetrics,
+  Template,
+} from './types';
 
 const TARGET_CENTER_X = 0.5;
 
@@ -261,4 +270,134 @@ export const PROFILES: Record<ProfileId, ProfileConfig> = {
 /** 档案由场景推导，不单独存（SPEC §4.5）。 */
 export function resolveProfile(sceneId: SceneId, includeGround: boolean): ProfileId {
   return sceneId === 'half' ? 'half' : includeGround ? 'full_ground' : 'full_noground';
+}
+
+/** 默认模板：把现有 3 个档案直接包装（规格 AC-7、AC-9 兜底）。 */
+export const DEFAULT_TEMPLATES: Template[] = [
+  {
+    id: 'half',
+    name: '半身照',
+    description: '胸口以上，人物占画面约 2/3',
+    coverUrl: '',
+    profile: half,
+    sort: 0,
+    active: true,
+  },
+  {
+    id: 'full_ground',
+    name: '全身照（拍脚）',
+    description: '从头到脚连地面一起入镜',
+    coverUrl: '',
+    profile: fullGround,
+    sort: 1,
+    active: true,
+  },
+  {
+    id: 'full_noground',
+    name: '全身照（不拍脚）',
+    description: '拍到小腿，脚不入镜',
+    coverUrl: '',
+    profile: fullNoGround,
+    sort: 2,
+    active: true,
+  },
+];
+
+const TARGET_CENTER_X_LOCAL = 0.5;
+
+/**
+ * 由 Supabase 存储的阈值配置重建 ProfileConfig。
+ * RuleConfig 的 enter/exit 是闭包不可序列化，所以存数字、这里重建。
+ * 共用规则（dark / noPerson / shift / tilt）与默认档案一致，仅可配置项取存储值。
+ */
+export function buildProfileFromStored(cfg: StoredTemplateConfig): ProfileConfig {
+  const base: ProfileId = cfg.base;
+  const useFaceOffset = base === 'half' || base === 'full_noground';
+  const hasFeetCrop = base === 'full_ground';
+
+  const rules: RuleConfig[] = [
+    dark,
+    noPerson,
+    rule(
+      'tooFar',
+      base === 'full_ground' ? 'tooFar.slight' : 'tooFar.twoSteps',
+      20,
+      'red',
+      (m) => m.scale < cfg.tooFarEnter,
+      (m) => m.scale >= cfg.tooFarExit,
+      (m) => (base === 'full_ground' ? m.hasEdges : m.hasShoulders),
+    ),
+    rule(
+      'tooClose',
+      base === 'full_ground' ? 'tooClose.slight' : 'tooClose.stepBack',
+      21,
+      'red',
+      (m) => m.scale > cfg.tooCloseEnter,
+      (m) => m.scale <= cfg.tooCloseExit,
+      (m) => (base === 'full_ground' ? m.hasEdges : m.hasShoulders),
+    ),
+    shiftRight,
+    shiftLeft,
+    rule(
+      'headCrop',
+      'headCrop',
+      40,
+      'red',
+      (m) => m.headTop < cfg.headCropEnter,
+      (m) => m.headTop >= cfg.headCropExit,
+      (m) => m.hasEdges,
+    ),
+    rule(
+      'headGap',
+      'headGap',
+      41,
+      'yellow',
+      (m) => m.headTop > cfg.headGapEnter,
+      (m) => m.headTop <= cfg.headGapExit,
+      (m) => m.hasEdges,
+    ),
+  ];
+
+  if (useFaceOffset) {
+    rules.splice(
+      2,
+      0,
+      rule(
+        'turnToCamera',
+        'turnToCamera',
+        10,
+        'yellow',
+        (m) => m.faceOffset > cfg.faceOffsetEnter,
+        (m) => m.faceOffset <= cfg.faceOffsetExit,
+        (m) => m.hasPerson && m.hasEdges && m.hasShoulders,
+      ),
+    );
+  }
+
+  if (hasFeetCrop) {
+    rules.push(
+      rule(
+        'feetCrop',
+        'feetCrop',
+        45,
+        'red',
+        (m) => gapBottomOf(m) < 0,
+        (m) => gapBottomOf(m) >= 0.02,
+        (m) => m.hasEdges,
+      ),
+    );
+  }
+
+  rules.push(tilt);
+
+  return {
+    id: base,
+    label: cfg.label,
+    targetBox: cfg.targetBox as Box,
+    targetCenterX: TARGET_CENTER_X_LOCAL,
+    scaleSource: base === 'full_ground' ? 'bboxHeight' : 'shoulder',
+    silhouettePath: base === 'half' ? 'half' : base === 'full_ground' ? 'full' : 'full_crop',
+    rules,
+    briefing: cfg.briefing,
+  };
 }

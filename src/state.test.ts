@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { initialState, reducer, type AppAction } from './state';
+import { DEFAULT_TEMPLATES } from './profiles';
 import type { AppState } from './types';
 
 function run(actions: AppAction[]): AppState {
@@ -158,5 +159,33 @@ describe('首次引导（SPEC §9.7）', () => {
     const s = run([{ type: 'SET_ONBOARDING_SEEN' }, { type: 'BACK_HOME' }]);
     expect(s.screen).toBe('S1');
     expect(s.hasSeenOnboarding).toBe(true);
+  });
+});
+
+describe('模板选择（SELECT_TEMPLATE）', () => {
+  it('选模板 → 直接进 S3，跳过 S2', () => {
+    const tpl = DEFAULT_TEMPLATES[0];
+    const s = run([{ type: 'SELECT_TEMPLATE', template: tpl }]);
+    expect(s.screen).toBe('S3');
+    expect(s.profile).toBe(tpl.profile.id);
+    expect(s.templateProfile).toBe(tpl.profile);
+  });
+
+  it('自定义模板的完整 ProfileConfig 被保留（不回退到 PROFILES）', () => {
+    const customTpl = {
+      ...DEFAULT_TEMPLATES[1],
+      profile: { ...DEFAULT_TEMPLATES[1].profile, label: '自定义全身' },
+    };
+    const s = run([{ type: 'SELECT_TEMPLATE', template: customTpl }]);
+    expect(s.templateProfile?.label).toBe('自定义全身');
+  });
+
+  it('回首页时清空 templateProfile', () => {
+    const s = run([
+      { type: 'SELECT_TEMPLATE', template: DEFAULT_TEMPLATES[0] },
+      { type: 'BACK_HOME' },
+    ]);
+    expect(s.templateProfile).toBeNull();
+    expect(s.screen).toBe('S1');
   });
 });

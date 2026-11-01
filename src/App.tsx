@@ -1,17 +1,22 @@
 // 屏幕路由。SPEC §2：App 用 useReducer 管理 AppState，screen 决定渲染哪个屏幕，不使用 URL 路由。
 
-import { useCallback, useReducer } from 'react';
-import S1SceneSelect from './screens/S1SceneSelect';
+import { useCallback, useReducer, useState } from 'react';
+import S1TemplateList from './screens/S1TemplateList';
 import S2IncludeGround from './screens/S2IncludeGround';
 import S3Handoff from './screens/S3Handoff';
 import S4Guide from './screens/S4Guide';
 import S5Select from './screens/S5Select';
 import SFallback from './screens/SFallback';
 import SManual from './screens/SManual';
+import AdminTemplates from './screens/AdminTemplates';
+import LoginModal from './screens/LoginModal';
+import SetPasswordModal from './screens/SetPasswordModal';
 import type { CameraFailureKind } from './hooks/useCamera';
 import { PROFILES } from './profiles';
 import { initialState, markOnboardingSeen, reducer } from './state';
 import type { ScreenId } from './types';
+import { isAdmin, useAuth } from './context/AuthContext';
+import { UI_COPY } from './copy';
 
 // 阶段 3 尚未接入的屏幕（S5 起在后续阶段实现），仅占位以免流程断在代码里。
 function Pending({ screen }: { screen: ScreenId }) {
@@ -22,9 +27,70 @@ function Pending({ screen }: { screen: ScreenId }) {
   );
 }
 
+/** S1 右上角认证入口：未登录显示「登录」，已登录显示邮箱缩写 + 下拉菜单。 */
+function AuthEntry({
+  onOpenAdmin,
+  onOpenSetPassword,
+}: {
+  onOpenAdmin: () => void;
+  onOpenSetPassword: () => void;
+}) {
+  const { user, signOut } = useAuth();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  if (!user) return null;
+
+  const initial = (user.email ?? '?').charAt(0).toUpperCase();
+
+  return (
+    <>
+      <button className="auth-btn" onClick={() => setMenuOpen((v) => !v)} aria-label="账户">
+        {initial}
+      </button>
+      {menuOpen && (
+        <div className="auth-menu" onMouseLeave={() => setMenuOpen(false)}>
+          {isAdmin(user) && (
+            <button
+              className="auth-menu__item"
+              onClick={() => {
+                setMenuOpen(false);
+                onOpenAdmin();
+              }}
+            >
+              {UI_COPY.adminEntry}
+            </button>
+          )}
+          <button
+            className="auth-menu__item"
+            onClick={() => {
+              setMenuOpen(false);
+              onOpenSetPassword();
+            }}
+          >
+            {UI_COPY.setPasswordEntry}
+          </button>
+          <button
+            className="auth-menu__item"
+            onClick={() => {
+              setMenuOpen(false);
+              signOut();
+            }}
+          >
+            {UI_COPY.logout}
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function App() {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const profile = state.profile ? PROFILES[state.profile] : null;
+  const [showLogin, setShowLogin] = useState(false);
+  const [showSetPassword, setShowSetPassword] = useState(false);
+  // 优先用模板带的完整 ProfileConfig（自定义阈值），否则回退到 PROFILES
+  const profile = state.templateProfile ?? (state.profile ? PROFILES[state.profile] : null);
+  const auth = useAuth();
 
   // SPEC §11 第 1 步：非安全连接直接进 SFallback，不尝试调用摄像头
   const startGuide = useCallback(() => {
@@ -50,9 +116,30 @@ export default function App() {
     dispatch({ type: 'SET_ONBOARDING_SEEN' });
   }, []);
 
+  const openAdmin = useCallback(() => dispatch({ type: 'GOTO', screen: 'Admin' }), []);
+
+  const showLoginBtn = state.screen === 'S1' && !auth.user;
+
   switch (state.screen) {
     case 'S1':
-      return <S1SceneSelect onSelect={(sceneId) => dispatch({ type: 'SELECT_SCENE', sceneId })} />;
+      return (
+        <>
+          <S1TemplateList onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })} />
+          {showLoginBtn && (
+            <button className="auth-btn" onClick={() => setShowLogin(true)}>
+              {UI_COPY.login}
+            </button>
+          )}
+          {state.screen === 'S1' && (
+            <AuthEntry
+              onOpenAdmin={openAdmin}
+              onOpenSetPassword={() => setShowSetPassword(true)}
+            />
+          )}
+          {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+          {showSetPassword && <SetPasswordModal onClose={() => setShowSetPassword(false)} />}
+        </>
+      );
     case 'S2':
       return (
         <S2IncludeGround
@@ -109,6 +196,8 @@ export default function App() {
           onHome={() => dispatch({ type: 'BACK_HOME' })}
         />
       );
+    case 'Admin':
+      return <AdminTemplates onBack={() => dispatch({ type: 'BACK_HOME' })} />;
     default:
       return <Pending screen={state.screen} />;
   }

@@ -1,15 +1,54 @@
-/* 全局样式：深色、全屏、单手可达。对应 SPEC §1.1「不引入 UI 库」。 */
+/* 全局样式：Apple Style Design Token。对应规格 §2.4。 */
 
 :root {
-  --bg: #000;
-  --card: #1c1c1e;
-  --card-active: #2c2c2e;
-  --text: #fff;
-  --text-dim: rgba(255, 255, 255, 0.6);
-  --line: rgba(255, 255, 255, 0.16);
+  /* 颜色（亮色） */
+  --bg: #f2f2f7;
+  --surface: #ffffff;
+  --surface-2: #f9f9fb;
+  --text: #1c1c1e;
+  --text-muted: #8e8e93;
+  --line: rgba(60, 60, 67, 0.12);
+  --accent: #007aff;
+  --glass: rgba(255, 255, 255, 0.72);
   --red: #ff3b30;
-  --yellow: #ffcc00;
+  --yellow: #ff9500;
   --green: #34c759;
+
+  /* 圆角 */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
+  --r-xl: 22px;
+  --r-full: 9999px;
+
+  /* 间距 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+
+  /* 阴影 */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.12);
+
+  /* 动效 */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --dur-1: 0.3s;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --text: #ffffff;
+    --text-muted: #8e8e93;
+    --line: rgba(255, 255, 255, 0.12);
+    --glass: rgba(28, 28, 30, 0.72);
+  }
 }
 
 * {
@@ -26,10 +65,12 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: -apple-system, 'SF Pro Text', 'PingFang SC', system-ui, 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overflow: hidden;
   user-select: none;
+  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
 
 /* ---------- 布局 ---------- */
@@ -79,7 +120,7 @@ body {
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 20px;
-  background: var(--card);
+  background: var(--surface);
   color: var(--text);
   font: inherit;
   cursor: pointer;
@@ -87,7 +128,7 @@ body {
 }
 
 .card:active {
-  background: var(--card-active);
+  background: var(--surface-2);
 }
 
 .card__label {
@@ -115,7 +156,7 @@ body {
   height: 76px;
   border: 2px solid var(--line);
   border-radius: 18px;
-  background: var(--card);
+  background: var(--surface);
   color: var(--text);
   font: inherit;
   font-size: 22px;
@@ -125,12 +166,12 @@ body {
 
 .choice--on {
   border-color: #fff;
-  background: var(--card-active);
+  background: var(--surface-2);
 }
 
 .hint {
   margin: 0;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 14px;
   line-height: 1.5;
   text-align: center;
@@ -166,13 +207,13 @@ body {
 
 .handoff__subtitle {
   margin: 0;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 18px;
 }
 
 .small {
   margin: 0;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 14px;
   line-height: 1.6;
 }
@@ -432,7 +473,7 @@ body {
   overflow: hidden;
   border-radius: 8px;
   border: 2px solid transparent;
-  background: var(--card);
+  background: var(--surface);
   cursor: pointer;
 }
 
@@ -452,7 +493,7 @@ body {
   margin: 0;
   text-align: center;
   font-size: 14px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
 .s5__empty {
@@ -462,7 +503,7 @@ body {
   justify-content: center;
   margin: 0;
   font-size: 18px;
-  color: var(--text-dim);
+  color: var(--text-muted);
 }
 
 .s5__actions {
@@ -592,7 +633,7 @@ body {
   max-width: 320px;
   padding: 24px 20px;
   border-radius: 18px;
-  background: var(--card);
+  background: var(--surface);
   text-align: center;
 }
 
@@ -623,7 +664,7 @@ body {
 
 .fallback__reason {
   margin: 0;
-  color: var(--text-dim);
+  color: var(--text-muted);
   font-size: 16px;
   line-height: 1.5;
 }
@@ -635,7 +676,7 @@ body {
   margin: 8px 0;
   padding: 18px;
   border-radius: 16px;
-  background: var(--card);
+  background: var(--surface);
   list-style: none;
 }
 
@@ -658,3 +699,378 @@ body {
 .ghost:active {
   background: rgba(255, 255, 255, 0.08);
 }
+
+/* ---------- 通用按钮（Apple Style） ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 50px;
+  padding: 0 20px;
+  border: none;
+  border-radius: var(--r-full);
+  font: inherit;
+  font-size: 17px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.1s var(--ease-spring), opacity var(--dur-1) var(--ease-out);
+}
+
+.btn:active {
+  transform: scale(0.96);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn--ghost {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+/* ---------- 输入框 ---------- */
+
+.input {
+  width: 100%;
+  height: 50px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+  transition: border-color var(--dur-1) var(--ease-out);
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+/* ---------- 登录模态 ---------- */
+
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: end center;
+  padding-bottom: env(safe-area-inset-bottom);
+  background: rgba(0, 0, 0, 0.45);
+  animation: modal-fade 0.25s var(--ease-out);
+}
+
+@keyframes modal-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.modal {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 24px 20px calc(24px + env(safe-area-inset-bottom));
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  animation: modal-rise 0.35s var(--ease-spring);
+}
+
+@keyframes modal-rise {
+  from {
+    transform: translateY(100%);
+  }
+}
+
+.modal__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modal__tabs,
+.modal__subtabs {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  border-radius: var(--r-md);
+  background: var(--surface-2);
+}
+
+.modal__tab,
+.modal__subtab {
+  flex: 1;
+  height: 38px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--dur-1) var(--ease-out);
+}
+
+.modal__tab--on,
+.modal__subtab--on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-sm);
+}
+
+.modal__tab:disabled {
+  color: var(--text-muted);
+  cursor: not-allowed;
+}
+
+.modal__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-align: center;
+}
+
+.modal__otp-row {
+  display: flex;
+  gap: 8px;
+}
+
+.modal__otp-row .input {
+  flex: 1;
+}
+
+.modal__ok {
+  margin: 0;
+  color: var(--green);
+  font-size: 14px;
+  text-align: center;
+}
+
+.modal__err {
+  margin: 0;
+  color: var(--red);
+  font-size: 14px;
+  text-align: center;
+}
+
+/* ---------- 顶栏认证按钮 ---------- */
+
+.auth-btn {
+  position: absolute;
+  top: calc(12px + env(safe-area-inset-top));
+  right: 16px;
+  z-index: 20;
+  height: 34px;
+  padding: 0 14px;
+  border: none;
+  border-radius: var(--r-full);
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-menu {
+  position: absolute;
+  top: calc(52px + env(safe-area-inset-top));
+  right: 16px;
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  min-width: 140px;
+  padding: 6px;
+  border-radius: var(--r-md);
+  background: var(--glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-md);
+}
+
+.auth-menu__item {
+  padding: 10px 12px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.auth-menu__item:active {
+  background: var(--surface-2);
+}
+
+/* ---------- 模板网格（S1） ---------- */
+
+.tpl-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  overflow-y: auto;
+  padding-bottom: 8px;
+}
+
+.tpl-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.15s var(--ease-spring);
+}
+
+.tpl-card:active {
+  transform: scale(0.97);
+}
+
+.tpl-card__cover {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 3 / 4;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.tpl-card__cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tpl-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+}
+
+.tpl-card__name {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tpl-card__desc {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.tpl-fallback {
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: var(--r-md);
+  background: rgba(255, 149, 0, 0.12);
+  color: var(--yellow);
+  font-size: 13px;
+  text-align: center;
+}
+
+/* ---------- 管理页 ---------- */
+
+.admin {
+  padding: calc(20px + env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
+  background: var(--bg);
+  color: var(--text);
+}
+
+.admin__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.admin__row-name {
+  font-weight: 600;
+}
+
+.admin__row-sub {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.admin__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+}
+
+.admin__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.admin__field label {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.admin__field input,
+.admin__field textarea,
+.admin__field select {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  outline: none;
+}
+
+.admin__field textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.admin__switch {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+

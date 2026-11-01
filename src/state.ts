@@ -1,7 +1,7 @@
 // 应用状态机。对应 SPEC §4（PRD §4.1），不使用 URL 路由。
 
 import { resolveProfile } from './profiles';
-import type { AppState, SceneId, ScreenId } from './types';
+import type { AppState, SceneId, ScreenId, Template } from './types';
 
 /** 引导层只展示一次；key 带版本后缀便于后续重放（SPEC §9.7）。 */
 export const ONBOARDING_KEY = 'shot-guide:onboarding:v1';
@@ -28,6 +28,7 @@ export const initialState: AppState = {
   sceneId: null,
   includeGround: true,
   profile: null,
+  templateProfile: null,
   photos: [],
   selectedIndex: 0,
   saveState: 'idle',
@@ -37,6 +38,7 @@ export const initialState: AppState = {
 
 export type AppAction =
   | { type: 'SELECT_SCENE'; sceneId: SceneId }
+  | { type: 'SELECT_TEMPLATE'; template: Template }
   | { type: 'SET_INCLUDE_GROUND'; includeGround: boolean }
   | { type: 'GOTO'; screen: ScreenId }
   | { type: 'SET_PHOTOS'; photos: Blob[] }
@@ -58,6 +60,15 @@ export function reducer(state: AppState, action: AppAction): AppState {
         sceneId: action.sceneId,
         profile: resolveProfile(action.sceneId, state.includeGround),
         screen: action.sceneId === 'half' ? 'S3' : 'S2',
+      };
+    }
+    case 'SELECT_TEMPLATE': {
+      // 选模板 → 直接进 S3 交接，跳过 S2（模板已决定档案）
+      return {
+        ...state,
+        profile: action.template.profile.id,
+        templateProfile: action.template.profile,
+        screen: 'S3',
       };
     }
     case 'SET_INCLUDE_GROUND': {
@@ -90,6 +101,13 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, failure: null, screen: 'S4' };
     case 'BACK_HOME':
       // 离开 S5 / 回首页时释放照片（PRD §4.5「离开 S5 即释放」）
-      return { ...state, screen: 'S1', photos: [], selectedIndex: 0, saveState: 'idle' };
+      return {
+        ...state,
+        screen: 'S1',
+        photos: [],
+        selectedIndex: 0,
+        saveState: 'idle',
+        templateProfile: null,
+      };
   }
 }
