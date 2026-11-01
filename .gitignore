@@ -12,3 +12,6 @@ public/wasm
 .trae-html-share-packages
 helpphoto
 tools.zip
+
+.vercel
+.env*
