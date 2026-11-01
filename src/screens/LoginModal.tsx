@@ -81,7 +81,8 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
     const { error: err } = await signInWithPassword(email, password);
     setSubmitting(false);
     if (err) {
-      setError(UI_COPY.loginPasswordError);
+      // 临时排障：把真实错误带出来，区分网络错误与凭据错误
+      setError(`${UI_COPY.loginPasswordError}（${err}）`);
       return;
     }
     onClose();
