@@ -7,7 +7,8 @@ import { supabase } from '../lib/supabase';
 import { DEFAULT_TEMPLATES, buildProfileFromStored } from '../profiles';
 import type { StoredTemplate, Template } from '../types';
 
-const FETCH_TIMEOUT_MS = 3000;
+// 移动网络/代理下 Supabase 首请求（含 TLS 握手）常超 3s，给到 10s。
+const FETCH_TIMEOUT_MS = 10000;
 
 export function mapStoredToTemplate(row: StoredTemplate): Template {
   return {
