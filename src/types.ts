@@ -2,7 +2,16 @@
 
 export type SceneId = 'half' | 'full';
 export type ProfileId = 'half' | 'full_ground' | 'full_noground';
-export type ScreenId = 'S1' | 'S2' | 'S3' | 'S4' | 'S5' | 'SFallback' | 'SManual' | 'Admin';
+export type ScreenId =
+  | 'S1'
+  | 'S2'
+  | 'S3'
+  | 'S4'
+  | 'S5'
+  | 'SFallback'
+  | 'SManual'
+  | 'Admin'
+  | 'AllTemplates';
 export type RuleColor = 'red' | 'yellow' | 'green';
 
 export interface AppState {
@@ -133,4 +142,10 @@ export interface StoredTemplate {
   profile_config: StoredTemplateConfig;
   sort: number;
   active: boolean;
+}
+
+/** 固定模板（half / full_ground / full_noground）的封面覆盖记录。 */
+export interface TemplateCoverRow {
+  key: string;
+  cover_url: string;
 }

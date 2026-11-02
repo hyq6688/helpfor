@@ -48,7 +48,33 @@ create policy "templates_write_owner"
     and coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false)
   );
 
--- 3. Storage：模板封面 bucket（公开读）
+-- 3. 固定模板封面覆盖表（管理员替换 half / full_ground / full_noground 的展示图）
+create table if not exists public.template_covers (
+  key text primary key,
+  cover_url text not null,
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists trg_template_covers_updated_at on public.template_covers;
+create trigger trg_template_covers_updated_at
+  before update on public.template_covers
+  for each row execute function public.set_updated_at();
+
+alter table public.template_covers enable row level security;
+
+drop policy if exists "fixed_covers_select_public" on public.template_covers;
+create policy "fixed_covers_select_public"
+  on public.template_covers for select
+  using (true);
+
+drop policy if exists "fixed_covers_write_admin" on public.template_covers;
+create policy "fixed_covers_write_admin"
+  on public.template_covers for all
+  to authenticated
+  using (coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false))
+  with check (coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false));
+
+-- 4. Storage：模板封面 bucket（公开读）
 insert into storage.buckets (id, name, public)
 values ('template-covers', 'template-covers', true)
 on conflict (id) do nothing;
@@ -86,7 +112,7 @@ create policy "template_covers_delete"
     and coalesce((auth.jwt() -> 'user_metadata' ->> 'is_admin')::boolean, false)
   );
 
--- 4. 把自己设为 admin（把下面的邮箱换成你的登录邮箱）
+-- 5. 把自己设为 admin（把下面的邮箱换成你的登录邮箱）
 -- update auth.users
 -- set user_metadata = jsonb_set(coalesce(user_metadata, '{}'::jsonb), '{is_admin}', 'true'::jsonb)
 -- where email = 'your@email.com';

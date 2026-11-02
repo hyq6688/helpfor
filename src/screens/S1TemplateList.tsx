@@ -1,61 +1,69 @@
-// S1 模板列表。规格 §2.2、AC-7~AC-9。
-// 从 useTemplates 拉取模板（含 Supabase 远程 + 内置兜底），点卡片 → 选模板进 S3。
+// S1 模板列表：2×2 四宫格（三个固定模板 + 全部模板入口）。
+// 规格 §2.2、AC-7~AC-9。
 
-import { useTemplates } from '../hooks/useTemplates';
-import { UI_COPY } from '../copy';
+import TemplateCover from '../components/TemplateCover';
+import { UI_COPY, templatesCountText } from '../copy';
+import { DEFAULT_TEMPLATES } from '../profiles';
 import type { Template } from '../types';
 
+/** 首页固定展示的三个模板 id（与 DEFAULT_TEMPLATES 一致）。 */
+const FIXED_IDS = ['half', 'full_ground', 'full_noground'] as const;
+
 interface Props {
+  templates: Template[];
+  fallback: boolean;
   onSelect: (template: Template) => void;
+  onOpenAll: () => void;
 }
 
-/** 封面图加载失败时显示轮廓占位。 */
-function CoverPlaceholder() {
+/** 「全部模板」卡片里的九宫格图标。 */
+function AllIcon() {
   return (
-    <svg viewBox="0 0 100 140" aria-hidden="true" style={{ width: '100%', height: '100%' }}>
-      <g fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" opacity="0.35">
-        <circle cx="50" cy="38" r="16" />
-        <path d="M22 130 Q22 92 50 90 Q78 92 78 130" />
+    <svg viewBox="0 0 48 48" aria-hidden="true" className="tpl-all__icon">
+      <g fill="currentColor" opacity="0.55">
+        <rect x="6" y="6" width="15" height="15" rx="4" />
+        <rect x="27" y="6" width="15" height="15" rx="4" />
+        <rect x="6" y="27" width="15" height="15" rx="4" />
+        <rect x="27" y="27" width="15" height="15" rx="4" />
       </g>
     </svg>
   );
 }
 
-export default function S1TemplateList({ onSelect }: Props) {
-  const { templates, fallback } = useTemplates();
+export default function S1TemplateList({ templates, fallback, onSelect, onOpenAll }: Props) {
+  const fixed = FIXED_IDS.map(
+    (id) => templates.find((t) => t.id === id) ?? DEFAULT_TEMPLATES.find((t) => t.id === id),
+  ).filter((t): t is Template => Boolean(t));
 
   return (
     <div className="screen">
       <h1 className="h1">选择模板</h1>
       {fallback && <p className="tpl-fallback">{UI_COPY.templatesFallback}</p>}
-      <div className="tpl-grid">
-        {templates.map((tpl) => (
+
+      <div className="tpl-fixed">
+        {fixed.map((tpl) => (
           <button
             key={tpl.id}
             className="tpl-card"
             onClick={() => onSelect(tpl)}
             aria-label={tpl.name}
           >
-            <div className="tpl-card__cover" style={{ color: 'var(--text-muted)' }}>
-              {tpl.coverUrl ? (
-                <img
-                  src={tpl.coverUrl}
-                  alt={tpl.name}
-                  loading="lazy"
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : (
-                <CoverPlaceholder />
-              )}
-            </div>
+            <TemplateCover url={tpl.coverUrl} name={tpl.name} />
             <div className="tpl-card__body">
               <p className="tpl-card__name">{tpl.name}</p>
-              <p className="tpl-card__desc">{tpl.description}</p>
             </div>
           </button>
         ))}
+
+        <button className="tpl-card tpl-all" onClick={onOpenAll} aria-label={UI_COPY.allTemplates}>
+          <div className="tpl-all__cover">
+            <AllIcon />
+          </div>
+          <div className="tpl-card__body">
+            <p className="tpl-card__name">{UI_COPY.allTemplates}</p>
+            <p className="tpl-card__desc">{templatesCountText(templates.length)}</p>
+          </div>
+        </button>
       </div>
     </div>
   );

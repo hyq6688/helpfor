@@ -38,6 +38,12 @@ export const UI_COPY = {
   manualBanner: '自动提示已关闭，请按轮廓构图后直接拍摄',
   templatesFallback: '模板加载失败，显示默认模板',
   templatesLoading: '正在加载模板…',
+  allTemplates: '全部模板',
+  adminFixedCovers: '固定模板封面',
+  adminReplaceCover: '替换照片',
+  adminCoverUploading: '上传中…',
+  adminCoverUpdated: '封面已更新',
+  adminCoverFailed: '封面上传失败',
   login: '登录',
   logout: '退出登录',
   loginEmail: '邮箱登录',
@@ -93,6 +99,9 @@ export const FALLBACK_REASON = {
   notFound: '未找到可用摄像头。',
   insecure: '当前不是安全连接（HTTPS），浏览器不会允许使用摄像头。',
 } as const;
+
+/** 首页「全部模板」卡片上的数量文案。 */
+export const templatesCountText = (count: number): string => `共 ${count} 个模板`;
 
 /** 各屏标题与按钮。 */
 export const SCREEN_COPY = {

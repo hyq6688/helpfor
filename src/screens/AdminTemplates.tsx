@@ -4,8 +4,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { isAdmin, useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import { mapCovers } from '../hooks/useTemplates';
+import { DEFAULT_TEMPLATES } from '../profiles';
 import { SCREEN_COPY, UI_COPY } from '../copy';
-import type { ProfileId, StoredTemplate, StoredTemplateConfig } from '../types';
+import type {
+  ProfileId,
+  StoredTemplate,
+  StoredTemplateConfig,
+  TemplateCoverRow,
+} from '../types';
 
 /** 三个骨架的默认阈值，用于新建模板时回填表单。 */
 const SKELETON_DEFAULTS: Record<ProfileId, StoredTemplateConfig> = {
@@ -90,6 +97,16 @@ export default function AdminTemplates({ onBack }: { onBack: () => void }) {
   const [uploading, setUploading] = useState(false);
   const [msg, setMsg] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  // 固定模板封面：key → 覆盖后的 url
+  const [covers, setCovers] = useState<Record<string, string>>({});
+  const [coverUploading, setCoverUploading] = useState<string | null>(null);
+  const [pendingCoverKey, setPendingCoverKey] = useState<string | null>(null);
+  const coverFileRef = useRef<HTMLInputElement>(null);
+
+  const fetchCovers = useCallback(async () => {
+    const { data } = await supabase.from('template_covers').select('*');
+    setCovers(mapCovers(data as TemplateCoverRow[] | null));
+  }, []);
 
   const fetchAll = useCallback(async () => {
     setListLoading(true);
@@ -106,8 +123,11 @@ export default function AdminTemplates({ onBack }: { onBack: () => void }) {
   }, []);
 
   useEffect(() => {
-    if (user) fetchAll();
-  }, [user, fetchAll]);
+    if (user) {
+      fetchAll();
+      fetchCovers();
+    }
+  }, [user, fetchAll, fetchCovers]);
 
   if (loading) {
     return (
@@ -202,6 +222,35 @@ export default function AdminTemplates({ onBack }: { onBack: () => void }) {
     }
   };
 
+  /** 固定模板封面：上传到 Storage 后写入 template_covers（按 key upsert）。 */
+  const handleFixedCoverUpload = async (key: string, file: File) => {
+    setCoverUploading(key);
+    setMsg('');
+    try {
+      const ext = file.name.split('.').pop() ?? 'jpg';
+      const path = `fixed/${key}-${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from('template-covers')
+        .upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+
+      const { data } = supabase.storage.from('template-covers').getPublicUrl(path);
+      const url = data.publicUrl;
+
+      const { error: dbErr } = await supabase
+        .from('template_covers')
+        .upsert({ key, cover_url: url }, { onConflict: 'key' });
+      if (dbErr) throw dbErr;
+
+      setCovers((prev) => ({ ...prev, [key]: url }));
+      setMsg(UI_COPY.adminCoverUpdated);
+    } catch (e) {
+      setMsg(`${UI_COPY.adminCoverFailed}：${(e as Error).message}`);
+    } finally {
+      setCoverUploading(null);
+    }
+  };
+
   const handleUnpublish = async (row: StoredTemplate) => {
     const { error } = await supabase.from('templates').update({ active: false }).eq('id', row.id);
     if (error) {
@@ -229,6 +278,45 @@ export default function AdminTemplates({ onBack }: { onBack: () => void }) {
       </div>
 
       {msg && <p className="small" style={{ color: 'var(--accent)' }}>{msg}</p>}
+
+      <div className="admin__covers">
+        <h3 style={{ margin: 0 }}>{UI_COPY.adminFixedCovers}</h3>
+        <div className="admin__cover-list">
+          {DEFAULT_TEMPLATES.map((tpl) => {
+            const url = covers[tpl.id] ?? tpl.coverUrl;
+            return (
+              <div className="admin__cover-item" key={tpl.id}>
+                <div className="admin__cover-thumb">
+                  {url && <img src={url} alt={tpl.name} />}
+                </div>
+                <p className="admin__cover-name">{tpl.name}</p>
+                <button
+                  className="btn btn--ghost"
+                  disabled={coverUploading === tpl.id}
+                  onClick={() => {
+                    setPendingCoverKey(tpl.id);
+                    coverFileRef.current?.click();
+                  }}
+                >
+                  {coverUploading === tpl.id ? UI_COPY.adminCoverUploading : UI_COPY.adminReplaceCover}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+        <input
+          ref={coverFileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            const key = pendingCoverKey;
+            e.target.value = '';
+            if (file && key) handleFixedCoverUpload(key, file);
+          }}
+        />
+      </div>
 
       {listLoading ? (
         <p className="small">{UI_COPY.templatesLoading}</p>

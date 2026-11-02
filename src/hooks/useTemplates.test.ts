@@ -2,7 +2,13 @@
 // 规格 TR-9.1、TR-9.2。
 
 import { describe, expect, it, vi } from 'vitest';
-import { loadTemplates, mergeTemplates, readTemplateCache, writeTemplateCache } from './useTemplates';
+import {
+  loadTemplates,
+  mergeTemplates,
+  readTemplateCache,
+  templatesFromCache,
+  writeTemplateCache,
+} from './useTemplates';
 import { DEFAULT_TEMPLATES } from '../profiles';
 import type { StoredTemplate } from '../types';
 
@@ -93,14 +99,19 @@ describe('mergeTemplates', () => {
     const merged = mergeTemplates(remote);
     expect(merged[merged.length - 1].id).toBe(DEFAULT_TEMPLATES[0].id);
   });
+
+  it('covers 覆盖固定模板的封面', () => {
+    const merged = mergeTemplates([], { half: 'https://x/half.jpg' });
+    expect(merged.find((t) => t.id === 'half')?.coverUrl).toBe('https://x/half.jpg');
+  });
 });
 
 describe('本地快照缓存', () => {
-  it('成功拉取时返回原始行，失败时为 null', async () => {
+  it('成功拉取时返回缓存快照，失败时为 null', async () => {
     const ok = await loadTemplates(mockClient({ data: [remoteRow('custom-1', 10)] }));
-    expect(ok.rows).toHaveLength(1);
+    expect(ok.cache?.remote).toHaveLength(1);
     const bad = await loadTemplates(mockClient({ data: null, error: new Error('boom') }));
-    expect(bad.rows).toBeNull();
+    expect(bad.cache).toBeNull();
   });
 
   it('写入后可读回，并合并默认模板', () => {
@@ -115,10 +126,29 @@ describe('本地快照缓存', () => {
       },
     });
 
-    writeTemplateCache([remoteRow('custom-2', 5)]);
-    const cached = readTemplateCache();
+    writeTemplateCache({ remote: [remoteRow('custom-2', 5)], covers: {} });
+    const cache = readTemplateCache();
+    expect(cache).not.toBeNull();
+    const cached = templatesFromCache(cache);
     expect(cached).toHaveLength(4);
-    expect(cached?.map((t) => t.id)).toContain('custom-2');
+    expect(cached.map((t) => t.id)).toContain('custom-2');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('兼容旧格式（纯远程行数组）', () => {
+    const store = new Map<string, string>([
+      ['shot-guide:templates:v1', JSON.stringify([remoteRow('legacy-1', 5)])],
+    ]);
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    });
+
+    const cache = readTemplateCache();
+    expect(cache?.remote).toHaveLength(1);
+    expect(cache?.covers).toEqual({});
 
     vi.unstubAllGlobals();
   });

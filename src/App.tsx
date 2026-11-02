@@ -7,8 +7,10 @@ import S2IncludeGround from './screens/S2IncludeGround';
 import S3Handoff from './screens/S3Handoff';
 import S5Select from './screens/S5Select';
 import SFallback from './screens/SFallback';
+import SAllTemplates from './screens/SAllTemplates';
 import LoginModal from './screens/LoginModal';
 import SetPasswordModal from './screens/SetPasswordModal';
+import { useTemplates } from './hooks/useTemplates';
 import type { CameraFailureKind } from './hooks/useCamera';
 import { PROFILES } from './profiles';
 import { initialState, markOnboardingSeen, reducer } from './state';
@@ -95,6 +97,8 @@ export default function App() {
   // 优先用模板带的完整 ProfileConfig（自定义阈值），否则回退到 PROFILES
   const profile = state.templateProfile ?? (state.profile ? PROFILES[state.profile] : null);
   const auth = useAuth();
+  // 模板在 App 层拉一次，S1 与「全部模板」页共用，避免重复请求
+  const { templates, fallback: templatesFallback } = useTemplates();
 
   // SPEC §11 第 1 步：非安全连接直接进 SFallback，不尝试调用摄像头
   const startGuide = useCallback(() => {
@@ -129,7 +133,12 @@ export default function App() {
     case 'S1':
       content = (
         <>
-          <S1TemplateList onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })} />
+          <S1TemplateList
+            templates={templates}
+            fallback={templatesFallback}
+            onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })}
+            onOpenAll={() => dispatch({ type: 'GOTO', screen: 'AllTemplates' })}
+          />
           {showLoginBtn && (
             <button className="auth-btn" onClick={() => setShowLogin(true)}>
               {UI_COPY.login}
@@ -210,6 +219,15 @@ export default function App() {
       break;
     case 'Admin':
       content = <AdminTemplates onBack={() => dispatch({ type: 'BACK_HOME' })} />;
+      break;
+    case 'AllTemplates':
+      content = (
+        <SAllTemplates
+          templates={templates}
+          onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })}
+          onBack={() => dispatch({ type: 'GOTO', screen: 'S1' })}
+        />
+      );
       break;
     default:
       content = <Pending screen={state.screen} />;

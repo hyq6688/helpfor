@@ -7,6 +7,9 @@ import {
   ROLL_ENTER_DEG,
   ROLL_EXIT_DEG,
 } from './constants';
+import halfCover from './assets/templates/half.jpg';
+import fullGroundCover from './assets/templates/full_ground.jpg';
+import fullNoGroundCover from './assets/templates/full_noground.jpg';
 import { dxOf, gapBottomOf } from './core/metrics';
 import type {
   Box,
@@ -278,7 +281,7 @@ export const DEFAULT_TEMPLATES: Template[] = [
     id: 'half',
     name: '半身照',
     description: '胸口以上，人物占画面约 2/3',
-    coverUrl: '',
+    coverUrl: halfCover,
     profile: half,
     sort: 0,
     active: true,
@@ -287,7 +290,7 @@ export const DEFAULT_TEMPLATES: Template[] = [
     id: 'full_ground',
     name: '全身照（拍脚）',
     description: '从头到脚连地面一起入镜',
-    coverUrl: '',
+    coverUrl: fullGroundCover,
     profile: fullGround,
     sort: 1,
     active: true,
@@ -296,7 +299,7 @@ export const DEFAULT_TEMPLATES: Template[] = [
     id: 'full_noground',
     name: '全身照（不拍脚）',
     description: '拍到小腿，脚不入镜',
-    coverUrl: '',
+    coverUrl: fullNoGroundCover,
     profile: fullNoGround,
     sort: 2,
     active: true,
