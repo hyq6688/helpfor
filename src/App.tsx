@@ -1,14 +1,12 @@
 // 屏幕路由。SPEC §2：App 用 useReducer 管理 AppState，screen 决定渲染哪个屏幕，不使用 URL 路由。
 
-import { useCallback, useReducer, useState } from 'react';
+import { lazy, Suspense, useCallback, useReducer, useState } from 'react';
+import type { ReactNode } from 'react';
 import S1TemplateList from './screens/S1TemplateList';
 import S2IncludeGround from './screens/S2IncludeGround';
 import S3Handoff from './screens/S3Handoff';
-import S4Guide from './screens/S4Guide';
 import S5Select from './screens/S5Select';
 import SFallback from './screens/SFallback';
-import SManual from './screens/SManual';
-import AdminTemplates from './screens/AdminTemplates';
 import LoginModal from './screens/LoginModal';
 import SetPasswordModal from './screens/SetPasswordModal';
 import type { CameraFailureKind } from './hooks/useCamera';
@@ -17,6 +15,12 @@ import { initialState, markOnboardingSeen, reducer } from './state';
 import type { ScreenId } from './types';
 import { isAdmin, useAuth } from './context/AuthContext';
 import { UI_COPY } from './copy';
+
+// 大依赖懒加载：S4 会带入 @mediapipe/tasks-vision（首屏包体积的主要来源），
+// 手动模式与管理页同样不在首屏路径，一并拆出。
+const S4Guide = lazy(() => import('./screens/S4Guide'));
+const SManual = lazy(() => import('./screens/SManual'));
+const AdminTemplates = lazy(() => import('./screens/AdminTemplates'));
 
 // 阶段 3 尚未接入的屏幕（S5 起在后续阶段实现），仅占位以免流程断在代码里。
 function Pending({ screen }: { screen: ScreenId }) {
@@ -120,9 +124,10 @@ export default function App() {
 
   const showLoginBtn = state.screen === 'S1' && !auth.user;
 
+  let content: ReactNode;
   switch (state.screen) {
     case 'S1':
-      return (
+      content = (
         <>
           <S1TemplateList onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })} />
           {showLoginBtn && (
@@ -140,18 +145,21 @@ export default function App() {
           {showSetPassword && <SetPasswordModal onClose={() => setShowSetPassword(false)} />}
         </>
       );
+      break;
     case 'S2':
-      return (
+      content = (
         <S2IncludeGround
           includeGround={state.includeGround}
           onChange={(includeGround) => dispatch({ type: 'SET_INCLUDE_GROUND', includeGround })}
           onNext={() => dispatch({ type: 'GOTO', screen: 'S3' })}
         />
       );
+      break;
     case 'S3':
-      return <S3Handoff onStart={startGuide} />;
+      content = <S3Handoff onStart={startGuide} />;
+      break;
     case 'S4':
-      return profile ? (
+      content = profile ? (
         <S4Guide
           profile={profile}
           hasSeenOnboarding={state.hasSeenOnboarding}
@@ -164,8 +172,9 @@ export default function App() {
       ) : (
         <Pending screen="S4" />
       );
+      break;
     case 'S5':
-      return (
+      content = (
         <S5Select
           photos={state.photos}
           onRetake={() => {
@@ -175,8 +184,9 @@ export default function App() {
           onDone={() => dispatch({ type: 'BACK_HOME' })}
         />
       );
+      break;
     case 'SManual':
-      return profile ? (
+      content = profile ? (
         <SManual
           profile={profile}
           onBack={() => dispatch({ type: 'BACK_HOME' })}
@@ -187,8 +197,9 @@ export default function App() {
       ) : (
         <Pending screen="SManual" />
       );
+      break;
     case 'SFallback':
-      return (
+      content = (
         <SFallback
           failure={state.failure ?? 'notFound'}
           briefing={(profile ?? PROFILES.half).briefing}
@@ -196,9 +207,14 @@ export default function App() {
           onHome={() => dispatch({ type: 'BACK_HOME' })}
         />
       );
+      break;
     case 'Admin':
-      return <AdminTemplates onBack={() => dispatch({ type: 'BACK_HOME' })} />;
+      content = <AdminTemplates onBack={() => dispatch({ type: 'BACK_HOME' })} />;
+      break;
     default:
-      return <Pending screen={state.screen} />;
+      content = <Pending screen={state.screen} />;
   }
+
+  // 懒加载分块的短暂空窗：留空容器即可，不放骨架屏，避免多一次闪动
+  return <Suspense fallback={<div className="screen screen--center" />}>{content}</Suspense>;
 }

@@ -22,47 +22,41 @@ function CoverPlaceholder() {
 }
 
 export default function S1TemplateList({ onSelect }: Props) {
-  const { templates, loading, fallback } = useTemplates();
+  const { templates, fallback } = useTemplates();
 
   return (
     <div className="screen">
-      <h1 className="h1">{UI_COPY.templatesLoading ? '选择模板' : '选择模板'}</h1>
+      <h1 className="h1">选择模板</h1>
       {fallback && <p className="tpl-fallback">{UI_COPY.templatesFallback}</p>}
-      {loading ? (
-        <p className="small" style={{ textAlign: 'center' }}>
-          {UI_COPY.templatesLoading}
-        </p>
-      ) : (
-        <div className="tpl-grid">
-          {templates.map((tpl) => (
-            <button
-              key={tpl.id}
-              className="tpl-card"
-              onClick={() => onSelect(tpl)}
-              aria-label={tpl.name}
-            >
-              <div className="tpl-card__cover" style={{ color: 'var(--text-muted)' }}>
-                {tpl.coverUrl ? (
-                  <img
-                    src={tpl.coverUrl}
-                    alt={tpl.name}
-                    loading="lazy"
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                ) : (
-                  <CoverPlaceholder />
-                )}
-              </div>
-              <div className="tpl-card__body">
-                <p className="tpl-card__name">{tpl.name}</p>
-                <p className="tpl-card__desc">{tpl.description}</p>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="tpl-grid">
+        {templates.map((tpl) => (
+          <button
+            key={tpl.id}
+            className="tpl-card"
+            onClick={() => onSelect(tpl)}
+            aria-label={tpl.name}
+          >
+            <div className="tpl-card__cover" style={{ color: 'var(--text-muted)' }}>
+              {tpl.coverUrl ? (
+                <img
+                  src={tpl.coverUrl}
+                  alt={tpl.name}
+                  loading="lazy"
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : (
+                <CoverPlaceholder />
+              )}
+            </div>
+            <div className="tpl-card__body">
+              <p className="tpl-card__name">{tpl.name}</p>
+              <p className="tpl-card__desc">{tpl.description}</p>
+            </div>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

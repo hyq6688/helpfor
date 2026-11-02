@@ -2,7 +2,7 @@
 // 规格 TR-9.1、TR-9.2。
 
 import { describe, expect, it, vi } from 'vitest';
-import { loadTemplates, mergeTemplates } from './useTemplates';
+import { loadTemplates, mergeTemplates, readTemplateCache, writeTemplateCache } from './useTemplates';
 import { DEFAULT_TEMPLATES } from '../profiles';
 import type { StoredTemplate } from '../types';
 
@@ -92,5 +92,46 @@ describe('mergeTemplates', () => {
     const remote = [{ ...DEFAULT_TEMPLATES[0], sort: 100 }];
     const merged = mergeTemplates(remote);
     expect(merged[merged.length - 1].id).toBe(DEFAULT_TEMPLATES[0].id);
+  });
+});
+
+describe('本地快照缓存', () => {
+  it('成功拉取时返回原始行，失败时为 null', async () => {
+    const ok = await loadTemplates(mockClient({ data: [remoteRow('custom-1', 10)] }));
+    expect(ok.rows).toHaveLength(1);
+    const bad = await loadTemplates(mockClient({ data: null, error: new Error('boom') }));
+    expect(bad.rows).toBeNull();
+  });
+
+  it('写入后可读回，并合并默认模板', () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+    });
+
+    writeTemplateCache([remoteRow('custom-2', 5)]);
+    const cached = readTemplateCache();
+    expect(cached).toHaveLength(4);
+    expect(cached?.map((t) => t.id)).toContain('custom-2');
+
+    vi.unstubAllGlobals();
+  });
+
+  it('内容损坏时静默返回 null', () => {
+    const store = new Map<string, string>([['shot-guide:templates:v1', '{oops']]);
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    });
+
+    expect(readTemplateCache()).toBeNull();
+    vi.unstubAllGlobals();
   });
 });
