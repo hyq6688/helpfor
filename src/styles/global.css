@@ -943,12 +943,16 @@ body {
 .tpl-grid {
   flex: 1;
   min-height: 0;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  align-content: start;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
   gap: 12px;
   overflow-y: auto;
   padding-bottom: 8px;
+}
+
+.tpl-grid .tpl-card {
+  width: calc(50% - 6px);
 }
 
 .tpl-grid .tpl-cover {
