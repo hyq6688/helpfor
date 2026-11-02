@@ -1,6 +1,6 @@
 // 屏幕路由。SPEC §2：App 用 useReducer 管理 AppState，screen 决定渲染哪个屏幕，不使用 URL 路由。
 
-import { lazy, Suspense, useCallback, useReducer, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import S1TemplateList from './screens/S1TemplateList';
 import S2IncludeGround from './screens/S2IncludeGround';
@@ -23,6 +23,13 @@ import { UI_COPY } from './copy';
 const S4Guide = lazy(() => import('./screens/S4Guide'));
 const SManual = lazy(() => import('./screens/SManual'));
 const AdminTemplates = lazy(() => import('./screens/AdminTemplates'));
+
+/** 浏览器历史里保存的导航快照；depth 表示当前条目距应用入口的层数。 */
+interface NavState {
+  app: true;
+  screen: ScreenId;
+  depth: number;
+}
 
 // 阶段 3 尚未接入的屏幕（S5 起在后续阶段实现），仅占位以免流程断在代码里。
 function Pending({ screen }: { screen: ScreenId }) {
@@ -100,6 +107,47 @@ export default function App() {
   // 模板在 App 层拉一次，S1 与「全部模板」页共用，避免重复请求
   const { templates, fallback: templatesFallback } = useTemplates();
 
+  // 浏览器返回键同步：每个屏幕入栈一条历史，返回时按历史里的屏幕还原。
+  // 到应用入口（首页）之前的历史时不做拦截，按浏览器默认行为离开站点。
+  const screenRef = useRef<ScreenId>(state.screen);
+  const skipPushRef = useRef(false);
+
+  useEffect(() => {
+    window.history.replaceState(
+      { app: true, screen: initialState.screen, depth: 0 } satisfies NavState,
+      '',
+    );
+
+    const onPop = (e: PopStateEvent) => {
+      const nav = e.state as NavState | null;
+      if (!nav?.app) return;
+      // 本次切换由 popstate 驱动，避免 effect 再补一条历史
+      skipPushRef.current = true;
+      if (nav.screen === 'S1') dispatch({ type: 'BACK_HOME' });
+      else dispatch({ type: 'GOTO', screen: nav.screen });
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  useEffect(() => {
+    if (screenRef.current === state.screen) {
+      skipPushRef.current = false;
+      return;
+    }
+    screenRef.current = state.screen;
+    if (skipPushRef.current) {
+      skipPushRef.current = false;
+      return;
+    }
+    const nav = window.history.state as NavState | null;
+    const depth = (nav?.app ? nav.depth : 0) + 1;
+    window.history.pushState(
+      { app: true, screen: state.screen, depth } satisfies NavState,
+      '',
+    );
+  }, [state.screen]);
+
   // SPEC §11 第 1 步：非安全连接直接进 SFallback，不尝试调用摄像头
   const startGuide = useCallback(() => {
     if (!window.isSecureContext) {
@@ -125,6 +173,26 @@ export default function App() {
   }, []);
 
   const openAdmin = useCallback(() => dispatch({ type: 'GOTO', screen: 'Admin' }), []);
+
+  // 应用内「返回」：优先消费浏览器历史条目，与系统返回键行为一致
+  const goBack = useCallback(() => {
+    const nav = window.history.state as NavState | null;
+    if (nav?.app && nav.depth > 0) {
+      window.history.back();
+    } else {
+      dispatch({ type: 'BACK_HOME' });
+    }
+  }, []);
+
+  // 「完成」回到首页：一次退回应用入口，避免历史里残留整条拍摄流程
+  const goHome = useCallback(() => {
+    const nav = window.history.state as NavState | null;
+    if (nav?.app && nav.depth > 0) {
+      window.history.go(-nav.depth);
+    } else {
+      dispatch({ type: 'BACK_HOME' });
+    }
+  }, []);
 
   const showLoginBtn = state.screen === 'S1' && !auth.user;
 
@@ -173,7 +241,7 @@ export default function App() {
           profile={profile}
           hasSeenOnboarding={state.hasSeenOnboarding}
           onOnboardingSeen={onOnboardingSeen}
-          onBack={() => dispatch({ type: 'BACK_HOME' })}
+          onBack={goBack}
           onCameraFailure={onCameraFailure}
           onModelFailure={() => dispatch({ type: 'MODEL_FAILED' })}
           onCaptured={onCaptured}
@@ -190,7 +258,7 @@ export default function App() {
             dispatch({ type: 'SET_PHOTOS', photos: [] });
             dispatch({ type: 'GOTO', screen: 'S4' });
           }}
-          onDone={() => dispatch({ type: 'BACK_HOME' })}
+          onDone={goHome}
         />
       );
       break;
@@ -198,7 +266,7 @@ export default function App() {
       content = profile ? (
         <SManual
           profile={profile}
-          onBack={() => dispatch({ type: 'BACK_HOME' })}
+          onBack={goBack}
           onCameraFailure={onCameraFailure}
           onRetry={() => dispatch({ type: 'RETRY_MODELS' })}
           onCaptured={onCaptured}
@@ -213,19 +281,19 @@ export default function App() {
           failure={state.failure ?? 'notFound'}
           briefing={(profile ?? PROFILES.half).briefing}
           onRetry={() => dispatch({ type: 'RETRY_CAMERA' })}
-          onHome={() => dispatch({ type: 'BACK_HOME' })}
+          onHome={goHome}
         />
       );
       break;
     case 'Admin':
-      content = <AdminTemplates onBack={() => dispatch({ type: 'BACK_HOME' })} />;
+      content = <AdminTemplates onBack={goBack} />;
       break;
     case 'AllTemplates':
       content = (
         <SAllTemplates
           templates={templates}
           onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })}
-          onBack={() => dispatch({ type: 'GOTO', screen: 'S1' })}
+          onBack={goBack}
         />
       );
       break;
