@@ -22,6 +22,7 @@ export function mapStoredToTemplate(row: StoredTemplate): Template {
     profile: buildProfileFromStored(row.profile_config),
     sort: row.sort ?? 0,
     active: row.active ?? true,
+    updatedAt: row.updated_at,
   };
 }
 

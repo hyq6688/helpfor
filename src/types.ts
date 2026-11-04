@@ -11,7 +11,9 @@ export type ScreenId =
   | 'SFallback'
   | 'SManual'
   | 'Admin'
-  | 'AllTemplates';
+  | 'AllTemplates'
+  | 'Account'
+  | 'Favorites';
 export type RuleColor = 'red' | 'yellow' | 'green';
 
 export interface AppState {
@@ -110,6 +112,7 @@ export interface Template {
   profile: ProfileConfig;
   sort: number;
   active: boolean;
+  updatedAt?: string; // 远程模板的更新时间，本地「最新」排序使用
 }
 
 /**
@@ -142,6 +145,7 @@ export interface StoredTemplate {
   profile_config: StoredTemplateConfig;
   sort: number;
   active: boolean;
+  updated_at?: string;
 }
 
 /** 固定模板（half / full_ground / full_noground）的封面覆盖记录。 */

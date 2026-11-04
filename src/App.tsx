@@ -1,4 +1,6 @@
-// 屏幕路由。SPEC §2：App 用 useReducer 管理 AppState，screen 决定渲染哪个屏幕，不使用 URL 路由。
+// 屏幕路由。SPEC §2：App 用 useReducer 管理 AppState，screen 决定渲染哪个屏幕。
+// 浏览层额外同步轻量 hash 路由（#/、#/templates、#/account、#/admin、#/favorites），
+// 相机屏幕不写入 URL，刷新后始终回到安全页面。
 
 import { lazy, Suspense, useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -8,15 +10,20 @@ import S3Handoff from './screens/S3Handoff';
 import S5Select from './screens/S5Select';
 import SFallback from './screens/SFallback';
 import SAllTemplates from './screens/SAllTemplates';
+import AccountPage from './screens/AccountPage';
+import FavoritesPage from './screens/FavoritesPage';
 import LoginModal from './screens/LoginModal';
-import SetPasswordModal from './screens/SetPasswordModal';
+import AppShell from './components/AppShell';
+import type { BrowseScreen } from './components/AppShell';
 import { useTemplates } from './hooks/useTemplates';
+import { useFavorites } from './hooks/useFavorites';
 import type { CameraFailureKind } from './hooks/useCamera';
 import { PROFILES } from './profiles';
 import { initialState, markOnboardingSeen, reducer } from './state';
 import type { ScreenId } from './types';
 import { isAdmin, useAuth } from './context/AuthContext';
 import { UI_COPY } from './copy';
+import { hashForScreen, parseHash, screenForRoute } from './core/hashRoute';
 
 // 大依赖懒加载：S4 会带入 @mediapipe/tasks-vision（首屏包体积的主要来源），
 // 手动模式与管理页同样不在首屏路径，一并拆出。
@@ -40,70 +47,60 @@ function Pending({ screen }: { screen: ScreenId }) {
   );
 }
 
-/** S1 右上角认证入口：未登录显示「登录」，已登录显示邮箱缩写 + 下拉菜单。 */
-function AuthEntry({
-  onOpenAdmin,
-  onOpenSetPassword,
-}: {
-  onOpenAdmin: () => void;
-  onOpenSetPassword: () => void;
-}) {
-  const { user, signOut } = useAuth();
-  const [menuOpen, setMenuOpen] = useState(false);
+/** 顶栏账户入口：未登录显示「登录」，已登录显示首字母并跳转账号中心。 */
+function AuthEntry({ onLogin, onOpenAccount }: { onLogin: () => void; onOpenAccount: () => void }) {
+  const { user, loading } = useAuth();
 
-  if (!user) return null;
+  if (loading) return null;
+
+  if (!user) {
+    return (
+      <button className="wf-topbar__login" onClick={onLogin}>
+        {UI_COPY.login}
+      </button>
+    );
+  }
 
   const initial = (user.email ?? '?').charAt(0).toUpperCase();
 
   return (
-    <>
-      <button className="auth-btn" onClick={() => setMenuOpen((v) => !v)} aria-label="账户">
-        {initial}
-      </button>
-      {menuOpen && (
-        <div className="auth-menu" onMouseLeave={() => setMenuOpen(false)}>
-          {isAdmin(user) && (
-            <button
-              className="auth-menu__item"
-              onClick={() => {
-                setMenuOpen(false);
-                onOpenAdmin();
-              }}
-            >
-              {UI_COPY.adminEntry}
-            </button>
-          )}
-          <button
-            className="auth-menu__item"
-            onClick={() => {
-              setMenuOpen(false);
-              onOpenSetPassword();
-            }}
-          >
-            {UI_COPY.setPasswordEntry}
-          </button>
-          <button
-            className="auth-menu__item"
-            onClick={() => {
-              setMenuOpen(false);
-              signOut();
-            }}
-          >
-            {UI_COPY.logout}
-          </button>
-        </div>
-      )}
-    </>
+    <button className="wf-account__trigger" onClick={onOpenAccount} aria-label={UI_COPY.accountTitle}>
+      {initial}
+    </button>
   );
 }
 
+/** 初始屏幕由 URL hash 决定；无法解析时回首页。 */
+function initialScreen(): ScreenId {
+  try {
+    return screenForRoute(parseHash(window.location.hash).name);
+  } catch {
+    return 'S1';
+  }
+}
+
+function initialTemplateId(): string | null {
+  try {
+    return parseHash(window.location.hash).templateId;
+  } catch {
+    return null;
+  }
+}
+
 export default function App() {
-  const [state, dispatch] = useReducer(reducer, initialState);
+  const [state, dispatch] = useReducer(reducer, initialState, (base) => ({
+    ...base,
+    screen: initialScreen(),
+  }));
   const [showLogin, setShowLogin] = useState(false);
-  const [showSetPassword, setShowSetPassword] = useState(false);
+  // 全部模板页的深链模板 id（#/templates/:id），驱动详情弹层开关
+  const [routeTemplateId, setRouteTemplateId] = useState<string | null>(() =>
+    initialTemplateId(),
+  );
   // 优先用模板带的完整 ProfileConfig（自定义阈值），否则回退到 PROFILES
   const profile = state.templateProfile ?? (state.profile ? PROFILES[state.profile] : null);
   const auth = useAuth();
+  const favoritesApi = useFavorites();
   // 模板在 App 层拉一次，S1 与「全部模板」页共用，避免重复请求
   const { templates, fallback: templatesFallback } = useTemplates();
 
@@ -114,9 +111,22 @@ export default function App() {
 
   useEffect(() => {
     window.history.replaceState(
-      { app: true, screen: initialState.screen, depth: 0 } satisfies NavState,
+      { app: true, screen: screenRef.current, depth: 0 } satisfies NavState,
       '',
+      window.location.href,
     );
+
+    // 地址栏 hash 变化（手输 / 分享链接）→ 还原浏览页；相机屏幕不在 URL 里。
+    const syncFromUrl = () => {
+      const route = parseHash(window.location.hash);
+      setRouteTemplateId(route.templateId);
+      const next = screenForRoute(route.name);
+      if (next === screenRef.current) return;
+      // 由 URL 驱动，不再补一条历史
+      skipPushRef.current = true;
+      if (next === 'S1') dispatch({ type: 'BACK_HOME' });
+      else dispatch({ type: 'GOTO', screen: next });
+    };
 
     const onPop = (e: PopStateEvent) => {
       const nav = e.state as NavState | null;
@@ -125,9 +135,15 @@ export default function App() {
       skipPushRef.current = true;
       if (nav.screen === 'S1') dispatch({ type: 'BACK_HOME' });
       else dispatch({ type: 'GOTO', screen: nav.screen });
+      setRouteTemplateId(parseHash(window.location.hash).templateId);
     };
+
     window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
+    window.addEventListener('hashchange', syncFromUrl);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener('hashchange', syncFromUrl);
+    };
   }, []);
 
   useEffect(() => {
@@ -142,11 +158,34 @@ export default function App() {
     }
     const nav = window.history.state as NavState | null;
     const depth = (nav?.app ? nav.depth : 0) + 1;
-    window.history.pushState(
-      { app: true, screen: state.screen, depth } satisfies NavState,
-      '',
-    );
+    const navState = { app: true, screen: state.screen, depth } satisfies NavState;
+    const url = hashForScreen(state.screen);
+    // 相机屏幕不进路由：只入栈历史状态，URL 保持上一个浏览页
+    if (url) window.history.pushState(navState, '', url);
+    else window.history.pushState(navState, '');
   }, [state.screen]);
+
+  // 全部模板页的详情深链：只改写当前条目的 hash，避免历史堆积
+  useEffect(() => {
+    if (state.screen !== 'AllTemplates') return;
+    const url = hashForScreen('AllTemplates', routeTemplateId);
+    if (!url || window.location.hash === url) return;
+    const nav = window.history.state as NavState | null;
+    window.history.replaceState(
+      {
+        app: true,
+        screen: 'AllTemplates',
+        depth: nav?.app ? nav.depth : 0,
+      } satisfies NavState,
+      '',
+      url,
+    );
+  }, [state.screen, routeTemplateId]);
+
+  // 离开全部模板页后清空深链 id，避免下次进入误开详情
+  useEffect(() => {
+    if (state.screen !== 'AllTemplates' && routeTemplateId) setRouteTemplateId(null);
+  }, [state.screen, routeTemplateId]);
 
   // SPEC §11 第 1 步：非安全连接直接进 SFallback，不尝试调用摄像头
   const startGuide = useCallback(() => {
@@ -194,32 +233,51 @@ export default function App() {
     }
   }, []);
 
-  const showLoginBtn = state.screen === 'S1' && !auth.user;
+  // 侧栏导航：回首页走历史回退，其余浏览页直接切换
+  const navigateBrowse = useCallback(
+    (screen: BrowseScreen) => {
+      if (screen === 'S1') {
+        goHome();
+        return;
+      }
+      dispatch({ type: 'GOTO', screen });
+    },
+    [goHome],
+  );
+
+  const authSlot = (
+    <AuthEntry
+      onLogin={() => setShowLogin(true)}
+      onOpenAccount={() => navigateBrowse('Account')}
+    />
+  );
+
+  const accountInitial = auth.user ? (auth.user.email ?? '?').charAt(0).toUpperCase() : null;
+
+  const shellProps = {
+    onNavigate: navigateBrowse,
+    isAdminUser: isAdmin(auth.user),
+    accountInitial,
+    onOpenAccount: () => navigateBrowse('Account'),
+    authSlot,
+  };
 
   let content: ReactNode;
   switch (state.screen) {
     case 'S1':
       content = (
         <>
-          <S1TemplateList
-            templates={templates}
-            fallback={templatesFallback}
-            onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })}
-            onOpenAll={() => dispatch({ type: 'GOTO', screen: 'AllTemplates' })}
-          />
-          {showLoginBtn && (
-            <button className="auth-btn" onClick={() => setShowLogin(true)}>
-              {UI_COPY.login}
-            </button>
-          )}
-          {state.screen === 'S1' && (
-            <AuthEntry
-              onOpenAdmin={openAdmin}
-              onOpenSetPassword={() => setShowSetPassword(true)}
+          <AppShell active="S1" {...shellProps}>
+            <S1TemplateList
+              templates={templates}
+              fallback={templatesFallback}
+              onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })}
+              onOpenAll={() => dispatch({ type: 'GOTO', screen: 'AllTemplates' })}
+              favoriteIds={favoritesApi.ids}
+              onToggleFavorite={favoritesApi.toggle}
             />
-          )}
+          </AppShell>
           {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
-          {showSetPassword && <SetPasswordModal onClose={() => setShowSetPassword(false)} />}
         </>
       );
       break;
@@ -286,15 +344,57 @@ export default function App() {
       );
       break;
     case 'Admin':
-      content = <AdminTemplates onBack={goBack} />;
+      content = (
+        <AppShell active="Admin" {...shellProps}>
+          <AdminTemplates onBack={goBack} />
+        </AppShell>
+      );
+      break;
+    case 'Account':
+      content = (
+        <>
+          <AppShell active="Account" {...shellProps}>
+            <AccountPage
+              onLogin={() => setShowLogin(true)}
+              onOpenAdmin={openAdmin}
+              onOpenFavorites={() => navigateBrowse('Favorites')}
+            />
+          </AppShell>
+          {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+        </>
+      );
       break;
     case 'AllTemplates':
       content = (
-        <SAllTemplates
-          templates={templates}
-          onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })}
-          onBack={goBack}
-        />
+        <AppShell active="AllTemplates" {...shellProps}>
+          <SAllTemplates
+            templates={templates}
+            fallback={templatesFallback}
+            onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })}
+            onBack={goBack}
+            favoriteIds={favoritesApi.ids}
+            onToggleFavorite={favoritesApi.toggle}
+            deepLinkId={routeTemplateId}
+            onDetailRouteChange={setRouteTemplateId}
+          />
+        </AppShell>
+      );
+      break;
+    case 'Favorites':
+      content = (
+        <AppShell active="Favorites" {...shellProps}>
+          <FavoritesPage
+            templates={templates}
+            favoriteIds={favoritesApi.ids}
+            onSelect={(template) => dispatch({ type: 'SELECT_TEMPLATE', template })}
+            onToggleFavorite={favoritesApi.toggle}
+            onBack={goBack}
+            onBrowseAll={() => navigateBrowse('AllTemplates')}
+            localOnlyNote={
+              Boolean(auth.user) && !favoritesApi.cloudAvailable && !favoritesApi.syncing
+            }
+          />
+        </AppShell>
       );
       break;
     default:

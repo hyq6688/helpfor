@@ -1,8 +1,9 @@
-// 登录模态。规格 AC-1~AC-3。
-// 邮箱 + 密码 / 邮箱验证码 双模式；手机号占位不实现。
+// 登录页。桌面 ≥1024 为双栏品牌故事壳，手机只保留全屏表单。
+// 认证逻辑不变：邮箱验证码 / 邮箱密码双模式；手机号占位不实现。
 
 import { useEffect, useRef, useState } from 'react';
-import { UI_COPY } from '../copy';
+import BrandMark from '../components/BrandMark';
+import { BRAND_COPY, UI_COPY } from '../copy';
 import { useAuth } from '../context/AuthContext';
 
 type Mode = 'otp' | 'password';
@@ -88,116 +89,148 @@ export default function LoginModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="modal-mask" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal__close" onClick={onClose} aria-label="关闭">
-          ×
-        </button>
-
-        <div className="modal__tabs">
-          <button
-            className={`modal__tab ${tab === 'email' ? 'modal__tab--on' : ''}`}
-            onClick={() => setTab('email')}
-          >
-            {UI_COPY.loginEmail}
-          </button>
-          <button
-            className={`modal__tab ${tab === 'phone' ? 'modal__tab--on' : ''}`}
-            disabled
-            title={UI_COPY.loginPhoneSoon}
-          >
-            {UI_COPY.loginPhone}
-          </button>
+    <div className="wf-auth">
+      <aside className="wf-auth__story">
+        <div className="wf-auth__story-top">
+          <BrandMark />
         </div>
-        {tab === 'phone' && <p className="modal__hint">{UI_COPY.loginPhoneSoon}</p>}
 
-        {tab === 'email' && (
-          <>
-            <div className="modal__subtabs">
-              <button
-                className={`modal__subtab ${mode === 'otp' ? 'modal__subtab--on' : ''}`}
-                onClick={() => {
-                  setMode('otp');
-                  setError('');
-                  setSuccess('');
-                }}
-              >
-                {UI_COPY.loginOtp}
-              </button>
-              <button
-                className={`modal__subtab ${mode === 'password' ? 'modal__subtab--on' : ''}`}
-                onClick={() => {
-                  setMode('password');
-                  setError('');
-                  setSuccess('');
-                }}
-              >
-                {UI_COPY.loginPassword}
-              </button>
-            </div>
+        <div className="wf-auth__story-main">
+          <p className="wf-eyebrow">{BRAND_COPY.kicker}</p>
+          <h2 className="wf-auth__story-title">{BRAND_COPY.authStoryTitle}</h2>
+          <p className="wf-auth__story-body">{BRAND_COPY.authStoryBody}</p>
+        </div>
 
-            <input
-              className="input"
-              type="email"
-              placeholder={UI_COPY.loginEmailPlaceholder}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-            />
+        <div className="wf-auth__visual" aria-hidden="true">
+          <span className="wf-auth__frame" />
+          <svg viewBox="0 0 100 140" className="wf-auth__silhouette">
+            <g fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+              <circle cx="50" cy="38" r="15" />
+              <path d="M24 128 Q24 92 50 90 Q76 92 76 128" />
+            </g>
+          </svg>
+        </div>
 
-            {mode === 'otp' ? (
-              <>
-                <div className="modal__otp-row">
+        <footer className="wf-auth__footer">{BRAND_COPY.authFooter}</footer>
+      </aside>
+
+      <div className="wf-auth__pane">
+        <div className="wf-auth__card" role="dialog" aria-modal="true" aria-label={BRAND_COPY.authTitle}>
+          <div className="wf-auth__cardhead">
+            <BrandMark compact />
+            <button className="wf-auth__close" onClick={onClose} aria-label="关闭">
+              ×
+            </button>
+          </div>
+
+          <h1 className="wf-auth__title">{BRAND_COPY.authTitle}</h1>
+          <p className="wf-auth__intro">{BRAND_COPY.authIntro}</p>
+
+          <div className="modal__tabs">
+            <button
+              className={`modal__tab ${tab === 'email' ? 'modal__tab--on' : ''}`}
+              onClick={() => setTab('email')}
+            >
+              {UI_COPY.loginEmail}
+            </button>
+            <button
+              className={`modal__tab ${tab === 'phone' ? 'modal__tab--on' : ''}`}
+              disabled
+              title={UI_COPY.loginPhoneSoon}
+            >
+              {UI_COPY.loginPhone}
+            </button>
+          </div>
+          {tab === 'phone' && <p className="modal__hint">{UI_COPY.loginPhoneSoon}</p>}
+
+          {tab === 'email' && (
+            <>
+              <div className="modal__subtabs">
+                <button
+                  className={`modal__subtab ${mode === 'otp' ? 'modal__subtab--on' : ''}`}
+                  onClick={() => {
+                    setMode('otp');
+                    setError('');
+                    setSuccess('');
+                  }}
+                >
+                  {UI_COPY.loginOtp}
+                </button>
+                <button
+                  className={`modal__subtab ${mode === 'password' ? 'modal__subtab--on' : ''}`}
+                  onClick={() => {
+                    setMode('password');
+                    setError('');
+                    setSuccess('');
+                  }}
+                >
+                  {UI_COPY.loginPassword}
+                </button>
+              </div>
+
+              <input
+                className="input"
+                type="email"
+                placeholder={UI_COPY.loginEmailPlaceholder}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+              />
+
+              {mode === 'otp' ? (
+                <>
+                  <div className="modal__otp-row">
+                    <input
+                      className="input"
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder={UI_COPY.loginOtpPlaceholder}
+                      value={token}
+                      onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))}
+                    />
+                    <button
+                      className="btn btn--ghost"
+                      onClick={handleGetOtp}
+                      disabled={countdown > 0 || submitting}
+                    >
+                      {countdown > 0 ? `${countdown}s` : UI_COPY.loginGetOtp}
+                    </button>
+                  </div>
+                  <button
+                    className="btn btn--primary"
+                    onClick={handleSubmitOtp}
+                    disabled={submitting}
+                  >
+                    {UI_COPY.loginSubmitOtp}
+                  </button>
+                </>
+              ) : (
+                <>
                   <input
                     className="input"
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder={UI_COPY.loginOtpPlaceholder}
-                    value={token}
-                    onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))}
+                    type="password"
+                    placeholder={UI_COPY.loginPasswordPlaceholder}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSubmitPassword()}
                   />
                   <button
-                    className="btn btn--ghost"
-                    onClick={handleGetOtp}
-                    disabled={countdown > 0 || submitting}
+                    className="btn btn--primary"
+                    onClick={handleSubmitPassword}
+                    disabled={submitting}
                   >
-                    {countdown > 0 ? `${countdown}s` : UI_COPY.loginGetOtp}
+                    {UI_COPY.loginSubmitPassword}
                   </button>
-                </div>
-                <button
-                  className="btn btn--primary"
-                  onClick={handleSubmitOtp}
-                  disabled={submitting}
-                >
-                  {UI_COPY.loginSubmitOtp}
-                </button>
-              </>
-            ) : (
-              <>
-                <input
-                  className="input"
-                  type="password"
-                  placeholder={UI_COPY.loginPasswordPlaceholder}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  onKeyDown={(e) => e.key === 'Enter' && handleSubmitPassword()}
-                />
-                <button
-                  className="btn btn--primary"
-                  onClick={handleSubmitPassword}
-                  disabled={submitting}
-                >
-                  {UI_COPY.loginSubmitPassword}
-                </button>
-              </>
-            )}
-          </>
-        )}
+                </>
+              )}
+            </>
+          )}
 
-        {success && <p className="modal__ok">{success}</p>}
-        {error && <p className="modal__err">{error}</p>}
+          {success && <p className="modal__ok">{success}</p>}
+          {error && <p className="modal__err">{error}</p>}
+        </div>
       </div>
     </div>
   );

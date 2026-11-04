@@ -2,7 +2,11 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import { applyTheme, resolveInitialTheme } from './core/theme';
 import './styles/global.css';
+
+// 首屏渲染前应用主题，避免浅色闪一下再切深色。
+applyTheme(resolveInitialTheme());
 
 // @mediapipe/tasks-vision 内置 usage log（每 60s 向 odml.pa.googleapis.com 上报）。
 // 本项目模型与 WASM 全自托管（SPEC §1.2），且照片只留在本机，故直接阻断；
